@@ -86,11 +86,9 @@ struct ActivslotApp: App {
                 // Regenerate movement plans with updated calendar data
                 await MovementPlanManager.shared.generatePlans()
 
-                // Morning refresh for smart daily planning (6-10 AM window)
-                let hour = Calendar.current.component(.hour, from: Date())
-                if hour >= 6 && hour < 10 {
-                    await DailyPlanSyncCoordinator.shared.refreshTodayPlan()
-                }
+                // Continuous optimization for smart daily planning
+                // Checks cooldowns, active hours, and step progress internally
+                await DailyPlanSyncCoordinator.shared.optimizeIfNeeded()
 
                 // Refresh daily notifications and autopilot scheduling
                 await NotificationManager.shared.refreshDailyNotifications()

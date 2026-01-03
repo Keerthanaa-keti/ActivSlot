@@ -5,18 +5,25 @@ import UserNotifications
 /// Coordinates automatic daily walk planning with calendar sync
 /// - Generates plans using SmartPlannerEngine's pattern learning
 /// - Syncs planned activities to user's calendar
-/// - Handles timing: evening generation for tomorrow, morning refresh
+/// - Continuously optimizes throughout the day based on progress
 /// - Manages calendar event lifecycle (create, update, delete)
 class DailyPlanSyncCoordinator: ObservableObject {
     static let shared = DailyPlanSyncCoordinator()
 
     private let smartPlanner = SmartPlannerEngine.shared
     private let calendarManager = CalendarManager.shared
+    private let healthKitManager = HealthKitManager.shared
     private let eventStore = EKEventStore()
 
     @Published var isProcessing = false
     @Published var lastSyncResult: SyncResult?
     @Published var syncErrors: [SyncError] = []
+
+    // Tracking for continuous optimization
+    private var lastOptimizationTime: Date?
+    private var lastKnownStepCount: Int = 0
+    private let optimizationCooldown: TimeInterval = 30 * 60 // 30 minutes between auto-optimizations
+    private let significantStepChange: Int = 1000 // Re-optimize if steps change by this much
 
     // MARK: - Data Types
 
@@ -27,6 +34,16 @@ class DailyPlanSyncCoordinator: ObservableObject {
         let eventsDeleted: Int
         let activitiesSynced: [SmartPlannerEngine.PlannedActivity]
         let syncedAt: Date
+        let optimizationType: OptimizationType
+    }
+
+    enum OptimizationType: String {
+        case initial = "Initial plan"
+        case morningRefresh = "Morning refresh"
+        case calendarChange = "Calendar changed"
+        case stepProgress = "Step progress update"
+        case periodic = "Periodic optimization"
+        case manual = "Manual sync"
     }
 
     enum SyncError: Error, LocalizedError {
@@ -61,7 +78,7 @@ class DailyPlanSyncCoordinator: ObservableObject {
         guard prefs.smartPlanAutoSyncEnabled else { return }
 
         guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) else { return }
-        await generateAndSync(for: tomorrow)
+        await generateAndSync(for: tomorrow, optimizationType: .initial)
     }
 
     /// Called in morning to refresh/regenerate today's plan
@@ -69,23 +86,85 @@ class DailyPlanSyncCoordinator: ObservableObject {
         let prefs = UserPreferences.shared
         guard prefs.smartPlanAutoSyncEnabled && prefs.smartPlanMorningRefreshEnabled else { return }
 
-        await generateAndSync(for: Date())
+        await generateAndSync(for: Date(), optimizationType: .morningRefresh)
     }
 
     /// Manual sync for a specific date
     func syncPlan(for date: Date) async {
-        await generateAndSync(for: date)
+        await generateAndSync(for: date, optimizationType: .manual)
+    }
+
+    // MARK: - Continuous Optimization
+
+    /// Called when app becomes active - checks if re-optimization is needed
+    func optimizeIfNeeded() async {
+        let prefs = UserPreferences.shared
+        guard prefs.smartPlanAutoSyncEnabled else { return }
+
+        // Only optimize during active hours
+        let hour = Calendar.current.component(.hour, from: Date())
+        guard hour >= prefs.wakeTime.hour && hour < prefs.sleepTime.hour else { return }
+
+        // Check cooldown
+        if let lastTime = lastOptimizationTime,
+           Date().timeIntervalSince(lastTime) < optimizationCooldown {
+            // Check if step count changed significantly
+            let currentSteps = await fetchCurrentSteps()
+            if abs(currentSteps - lastKnownStepCount) >= significantStepChange {
+                await generateAndSync(for: Date(), optimizationType: .stepProgress, forceUpdate: true)
+                lastKnownStepCount = currentSteps
+            }
+            return
+        }
+
+        // Periodic optimization
+        await generateAndSync(for: Date(), optimizationType: .periodic)
+        lastOptimizationTime = Date()
+        lastKnownStepCount = await fetchCurrentSteps()
+    }
+
+    /// Called when step count updates significantly
+    func handleStepCountChange(newSteps: Int) async {
+        let prefs = UserPreferences.shared
+        guard prefs.smartPlanAutoSyncEnabled else { return }
+
+        // Check if change is significant
+        if abs(newSteps - lastKnownStepCount) >= significantStepChange {
+            lastKnownStepCount = newSteps
+            await generateAndSync(for: Date(), optimizationType: .stepProgress, forceUpdate: true)
+        }
+    }
+
+    /// Called when user completes or skips an activity
+    func handleActivityStatusChange() async {
+        let prefs = UserPreferences.shared
+        guard prefs.smartPlanAutoSyncEnabled else { return }
+
+        // Re-optimize to fill gaps or adjust based on completion
+        await generateAndSync(for: Date(), optimizationType: .stepProgress, forceUpdate: true)
+    }
+
+    private func fetchCurrentSteps() async -> Int {
+        do {
+            return try await healthKitManager.fetchTodaySteps()
+        } catch {
+            return lastKnownStepCount
+        }
     }
 
     // MARK: - Core Sync Logic
 
-    private func generateAndSync(for date: Date) async {
+    private func generateAndSync(
+        for date: Date,
+        optimizationType: OptimizationType = .initial,
+        forceUpdate: Bool = false
+    ) async {
         let prefs = UserPreferences.shared
         let dateString = formatDateString(date)
-
-        // Check if already synced today (skip duplicate syncs unless it's a refresh)
         let isToday = Calendar.current.isDateInToday(date)
-        if prefs.smartPlanLastSyncDate == dateString && !isToday {
+
+        // Check if we should skip this sync (unless forced)
+        if !forceUpdate && prefs.smartPlanLastSyncDate == dateString && !isToday {
             return
         }
 
@@ -106,22 +185,51 @@ class DailyPlanSyncCoordinator: ObservableObject {
         // Step 2: Generate the smart plan
         let plan = await smartPlanner.generateDailyPlan(for: date)
 
-        // Step 3: Delete existing managed events for this date
-        let deletedCount = await deleteExistingEvents(for: dateString)
+        // Step 3: For today's plan, only update FUTURE activities (preserve past ones)
+        var activitiesToSync: [SmartPlannerEngine.PlannedActivity]
+        var deletedCount = 0
+
+        if isToday {
+            let now = Date()
+
+            // Filter to only future activities
+            activitiesToSync = plan.activities.filter { activity in
+                activity.startTime > now
+            }
+
+            // Delete only future managed events, keep past ones
+            deletedCount = await deleteFutureEvents(for: dateString, after: now)
+
+            #if DEBUG
+            print("DailyPlanSyncCoordinator: Optimizing - keeping past activities, updating \(activitiesToSync.count) future slots")
+            #endif
+        } else {
+            // For tomorrow or other dates, sync all activities
+            activitiesToSync = plan.activities
+            deletedCount = await deleteExistingEvents(for: dateString)
+        }
 
         // Step 4: Create new calendar events for planned activities
         let (createdIDs, createdCount) = await createCalendarEvents(
-            for: plan.activities,
+            for: activitiesToSync,
             date: date
         )
 
         // Step 5: Store managed event IDs for lifecycle management
         var managedIDs = prefs.smartPlanManagedEventIDs
-        managedIDs[dateString] = createdIDs
+        if isToday {
+            // Merge new IDs with existing ones (for past activities)
+            var existingIDs = managedIDs[dateString] ?? []
+            existingIDs.append(contentsOf: createdIDs)
+            managedIDs[dateString] = existingIDs
+        } else {
+            managedIDs[dateString] = createdIDs
+        }
         prefs.smartPlanManagedEventIDs = managedIDs
 
         // Step 6: Update sync tracking
         prefs.smartPlanLastSyncDate = dateString
+        lastOptimizationTime = Date()
 
         // Step 7: Report result
         await MainActor.run {
@@ -130,14 +238,50 @@ class DailyPlanSyncCoordinator: ObservableObject {
                 eventsCreated: createdCount,
                 eventsUpdated: 0,
                 eventsDeleted: deletedCount,
-                activitiesSynced: plan.activities,
-                syncedAt: Date()
+                activitiesSynced: activitiesToSync,
+                syncedAt: Date(),
+                optimizationType: optimizationType
             )
         }
 
         #if DEBUG
-        print("DailyPlanSyncCoordinator: Synced \(createdCount) events for \(dateString)")
+        print("DailyPlanSyncCoordinator: [\(optimizationType.rawValue)] Synced \(createdCount) events for \(dateString)")
         #endif
+    }
+
+    /// Delete only future events (for re-optimization that preserves past activities)
+    private func deleteFutureEvents(for dateString: String, after cutoffTime: Date) async -> Int {
+        let prefs = UserPreferences.shared
+        guard let eventIDs = prefs.smartPlanManagedEventIDs[dateString] else { return 0 }
+
+        var deletedCount = 0
+        var remainingIDs: [String] = []
+
+        for eventID in eventIDs {
+            if let event = eventStore.event(withIdentifier: eventID) {
+                // Only delete if event starts after cutoff time
+                if event.startDate > cutoffTime {
+                    do {
+                        try eventStore.remove(event, span: .thisEvent)
+                        deletedCount += 1
+                    } catch {
+                        await MainActor.run {
+                            syncErrors.append(.eventDeletionFailed(error.localizedDescription))
+                        }
+                    }
+                } else {
+                    // Keep past events
+                    remainingIDs.append(eventID)
+                }
+            }
+        }
+
+        // Update stored IDs to only include remaining (past) events
+        var managedIDs = prefs.smartPlanManagedEventIDs
+        managedIDs[dateString] = remainingIDs
+        prefs.smartPlanManagedEventIDs = managedIDs
+
+        return deletedCount
     }
 
     // MARK: - Prerequisites Validation
