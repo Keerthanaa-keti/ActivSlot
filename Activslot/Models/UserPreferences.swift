@@ -324,6 +324,9 @@ class UserPreferences: ObservableObject {
     @AppStorage("smartPlanSyncTimeHour") var smartPlanSyncTimeHour: Int = 20  // 8 PM default
     @AppStorage("smartPlanSyncTimeMinute") var smartPlanSyncTimeMinute: Int = 0
     @AppStorage("smartPlanMorningRefreshEnabled") var smartPlanMorningRefreshEnabled: Bool = true
+    @AppStorage("smartPlanCheckpointsEnabled") var smartPlanCheckpointsEnabled: Bool = true
+    @AppStorage("autoReplanWhenBehind") var autoReplanWhenBehind: Bool = true
+    @AppStorage("walkableMeetingPreNotifications") var walkableMeetingPreNotifications: Bool = true
     @AppStorage("smartPlanLastSyncDate") var smartPlanLastSyncDate: String = ""
     @AppStorage("smartPlanManagedEventIDs") private var smartPlanManagedEventIDsData: Data = Data()
 

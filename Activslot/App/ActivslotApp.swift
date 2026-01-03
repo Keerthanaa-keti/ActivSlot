@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import BackgroundTasks
 
 @main
 struct ActivslotApp: App {
@@ -90,6 +91,9 @@ struct ActivslotApp: App {
                 // Checks cooldowns, active hours, and step progress internally
                 await DailyPlanSyncCoordinator.shared.optimizeIfNeeded()
 
+                // Check and evaluate checkpoints if we're at a checkpoint time
+                await DailyPlanSyncCoordinator.shared.checkAndEvaluateCheckpoints()
+
                 // Refresh daily notifications and autopilot scheduling
                 await NotificationManager.shared.refreshDailyNotifications()
                 await AutopilotManager.shared.scheduleWalksForTomorrow()
@@ -121,6 +125,13 @@ struct ActivslotApp: App {
     }
 }
 
+// MARK: - Background Task Identifiers
+
+enum BackgroundTaskIdentifier {
+    static let eveningPlanSync = "com.activslot.healthapp.eveningPlanSync"
+    static let checkpointEvaluation = "com.activslot.healthapp.checkpointEvaluation"
+}
+
 // MARK: - App Delegate for Notification Handling
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -135,7 +146,170 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         // Register notification categories (for action buttons)
         NotificationManager.shared.registerNotificationCategories()
 
+        // Register background tasks
+        registerBackgroundTasks()
+
         return true
+    }
+
+    // MARK: - Background Task Registration
+
+    private func registerBackgroundTasks() {
+        // Register evening plan sync task
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: BackgroundTaskIdentifier.eveningPlanSync,
+            using: nil
+        ) { task in
+            self.handleEveningPlanSync(task: task as! BGAppRefreshTask)
+        }
+
+        // Register checkpoint evaluation task
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: BackgroundTaskIdentifier.checkpointEvaluation,
+            using: nil
+        ) { task in
+            self.handleCheckpointEvaluation(task: task as! BGAppRefreshTask)
+        }
+
+        // Schedule initial tasks
+        scheduleEveningPlanSyncTask()
+        scheduleNextCheckpointTask()
+    }
+
+    private func handleEveningPlanSync(task: BGAppRefreshTask) {
+        // Set expiration handler
+        task.expirationHandler = {
+            task.setTaskCompleted(success: false)
+        }
+
+        Task {
+            let prefs = UserPreferences.shared
+            guard prefs.smartPlanAutoSyncEnabled else {
+                task.setTaskCompleted(success: true)
+                return
+            }
+
+            // Analyze patterns if needed
+            await SmartPlannerEngine.shared.analyzeDayOfWeekPatterns()
+
+            // Generate and sync tomorrow's plan
+            await DailyPlanSyncCoordinator.shared.syncTomorrowPlan()
+
+            task.setTaskCompleted(success: true)
+
+            // Schedule next evening sync
+            self.scheduleEveningPlanSyncTask()
+        }
+    }
+
+    private func handleCheckpointEvaluation(task: BGAppRefreshTask) {
+        task.expirationHandler = {
+            task.setTaskCompleted(success: false)
+        }
+
+        Task {
+            let prefs = UserPreferences.shared
+            guard prefs.smartPlanAutoSyncEnabled && prefs.smartPlanCheckpointsEnabled else {
+                task.setTaskCompleted(success: true)
+                return
+            }
+
+            // Evaluate current checkpoint
+            await DailyPlanSyncCoordinator.shared.evaluateCheckpoint()
+
+            task.setTaskCompleted(success: true)
+
+            // Schedule next checkpoint
+            self.scheduleNextCheckpointTask()
+        }
+    }
+
+    func scheduleEveningPlanSyncTask() {
+        let prefs = UserPreferences.shared
+        let calendar = Calendar.current
+
+        // Schedule for sync time (default 8 PM)
+        var components = calendar.dateComponents([.year, .month, .day], from: Date())
+        components.hour = prefs.smartPlanSyncTimeHour
+        components.minute = prefs.smartPlanSyncTimeMinute
+
+        guard var scheduledDate = calendar.date(from: components) else { return }
+
+        // If it's already past the sync time, schedule for tomorrow
+        if scheduledDate <= Date() {
+            scheduledDate = calendar.date(byAdding: .day, value: 1, to: scheduledDate) ?? scheduledDate
+        }
+
+        let request = BGAppRefreshTaskRequest(identifier: BackgroundTaskIdentifier.eveningPlanSync)
+        request.earliestBeginDate = scheduledDate
+
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            #if DEBUG
+            print("Scheduled evening plan sync for \(scheduledDate)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("Failed to schedule evening plan sync: \(error)")
+            #endif
+        }
+    }
+
+    func scheduleNextCheckpointTask() {
+        let calendar = Calendar.current
+        let now = Date()
+        let currentHour = calendar.component(.hour, from: now)
+
+        // Find next checkpoint hour (10, 13, 16, 19)
+        let checkpointHours = SmartPlannerEngine.DayCheckpoints.defaultCheckpointHours
+        var nextCheckpointHour: Int?
+
+        for hour in checkpointHours {
+            if hour > currentHour {
+                nextCheckpointHour = hour
+                break
+            }
+        }
+
+        // If no checkpoint left today, schedule for first checkpoint tomorrow
+        guard let targetHour = nextCheckpointHour else {
+            // Schedule for first checkpoint tomorrow
+            if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) {
+                var components = calendar.dateComponents([.year, .month, .day], from: tomorrow)
+                components.hour = checkpointHours.first ?? 10
+                components.minute = 0
+
+                if let scheduledDate = calendar.date(from: components) {
+                    submitCheckpointTask(at: scheduledDate)
+                }
+            }
+            return
+        }
+
+        // Schedule for next checkpoint today
+        var components = calendar.dateComponents([.year, .month, .day], from: now)
+        components.hour = targetHour
+        components.minute = 0
+
+        if let scheduledDate = calendar.date(from: components) {
+            submitCheckpointTask(at: scheduledDate)
+        }
+    }
+
+    private func submitCheckpointTask(at date: Date) {
+        let request = BGAppRefreshTaskRequest(identifier: BackgroundTaskIdentifier.checkpointEvaluation)
+        request.earliestBeginDate = date
+
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            #if DEBUG
+            print("Scheduled checkpoint evaluation for \(date)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("Failed to schedule checkpoint evaluation: \(error)")
+            #endif
+        }
     }
 
     // Handle notification when app is in foreground
@@ -168,6 +342,15 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
             case "workoutReminder":
                 handleWorkoutReminderAction(actionIdentifier, userInfo: userInfo)
+
+            case "planReady":
+                handlePlanReadyAction(actionIdentifier, userInfo: userInfo)
+
+            case "behindOnSteps":
+                handleBehindOnStepsAction(actionIdentifier, userInfo: userInfo)
+
+            case "walkableMeetingPre":
+                handleWalkableMeetingAction(actionIdentifier, userInfo: userInfo)
 
             default:
                 break
@@ -221,6 +404,28 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             break
         }
     }
+
+    private func handlePlanReadyAction(_ action: String, userInfo: [AnyHashable: Any]) {
+        switch action {
+        case "VIEW_PLAN", UNNotificationDefaultActionIdentifier:
+            // Navigate to smart plan view
+            NotificationCenter.default.post(name: .openSmartPlan, object: nil, userInfo: userInfo)
+
+        default:
+            break
+        }
+    }
+
+    private func handleBehindOnStepsAction(_ action: String, userInfo: [AnyHashable: Any]) {
+        switch action {
+        case "ADD_WALK", UNNotificationDefaultActionIdentifier:
+            // Open app to add catch-up walk
+            NotificationCenter.default.post(name: .addCatchUpWalk, object: nil, userInfo: userInfo)
+
+        default:
+            break
+        }
+    }
 }
 
 // MARK: - Notification Names
@@ -229,4 +434,6 @@ extension Notification.Name {
     static let openDayPlan = Notification.Name("openDayPlan")
     static let startWalkSession = Notification.Name("startWalkSession")
     static let startWorkoutSession = Notification.Name("startWorkoutSession")
+    static let openSmartPlan = Notification.Name("openSmartPlan")
+    static let addCatchUpWalk = Notification.Name("addCatchUpWalk")
 }

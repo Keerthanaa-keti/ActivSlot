@@ -23,11 +23,13 @@ class SmartPlannerEngine: ObservableObject {
     @Published var isAnalyzing = false
     @Published var userPatterns: UserActivityPatterns?
     @Published var planAdherence: PlanAdherence?
+    @Published var dayOfWeekPatterns: DayOfWeekPatterns?
 
     // UserDefaults keys
     private let patternsKey = "smartPlanner_userPatterns"
     private let adherenceKey = "smartPlanner_planAdherence"
     private let lastAnalysisKey = "smartPlanner_lastAnalysisDate"
+    private let dayOfWeekPatternsKey = "smartPlanner_dayOfWeekPatterns"
 
     private init() {
         loadCachedData()
@@ -74,6 +76,12 @@ class SmartPlannerEngine: ObservableObject {
         let reason: String // Why this time was chosen
         var status: ActivityStatus
         var calendarEventID: String?
+
+        // Adherence tracking fields
+        var expectedSteps: Int { estimatedSteps }
+        var actualSteps: Int?
+        var verifiedAt: Date?
+        var adherenceStatus: AdherenceStatus = .pending
 
         enum ActivityType: String, Codable {
             case scheduledWalk = "scheduled_walk"
@@ -194,9 +202,133 @@ class SmartPlannerEngine: ObservableObject {
         }
     }
 
+    // MARK: - Day-of-Week Pattern Learning
+
+    /// Per-day activity patterns - learns "Tuesday behavior" vs "Monday behavior"
+    /// This enables highly personalized planning: "On Tuesdays, you walk at 7am and 12pm"
+    struct DayOfWeekPatterns: Codable {
+        /// Dictionary keyed by weekday (1=Sunday, 2=Monday, ..., 7=Saturday)
+        var dayPatterns: [Int: DayPattern]
+        var lastUpdated: Date
+
+        struct DayPattern: Codable {
+            let weekday: Int
+            var peakActivityHours: [Int]              // Hours when user is most active on THIS day
+            var hourlyStepAverages: [Int: Int]        // hour -> average steps on this day
+            var totalDaysSampled: Int                 // How many of this weekday we've analyzed
+            var averageDailySteps: Int                // Average total steps on this day
+            var adherenceRate: Double                 // Plan completion rate for this day (0-1)
+            var bestSlotSuccessRates: [Int: Double]   // hour -> success rate for planned activities
+
+            /// Get recommended walk times for this day based on historical patterns
+            var recommendedWalkTimes: [HourlyWalkPattern] {
+                // Find hours with significant activity (>500 steps average)
+                hourlyStepAverages
+                    .filter { $0.value > 500 }
+                    .sorted { $0.value > $1.value }
+                    .prefix(5)
+                    .map { HourlyWalkPattern(hour: $0.key, averageSteps: $0.value, frequency: 1.0, averageDuration: max(10, $0.value / 100)) }
+            }
+
+            static func empty(weekday: Int) -> DayPattern {
+                DayPattern(
+                    weekday: weekday,
+                    peakActivityHours: [8, 12, 17],
+                    hourlyStepAverages: [:],
+                    totalDaysSampled: 0,
+                    averageDailySteps: 0,
+                    adherenceRate: 0.5,
+                    bestSlotSuccessRates: [:]
+                )
+            }
+        }
+
+        struct HourlyWalkPattern: Codable {
+            let hour: Int
+            let averageSteps: Int
+            let frequency: Double       // 0-1, how often they walk at this hour
+            let averageDuration: Int    // estimated minutes based on steps
+        }
+
+        /// Initialize with empty patterns for all days
+        static var empty: DayOfWeekPatterns {
+            var patterns: [Int: DayPattern] = [:]
+            for weekday in 1...7 {
+                patterns[weekday] = .empty(weekday: weekday)
+            }
+            return DayOfWeekPatterns(dayPatterns: patterns, lastUpdated: Date())
+        }
+
+        /// Get pattern for a specific date's weekday
+        func pattern(for date: Date) -> DayPattern? {
+            let weekday = Calendar.current.component(.weekday, from: date)
+            return dayPatterns[weekday]
+        }
+    }
+
+    // MARK: - Adherence Tracking Enhancements
+
+    /// Status of adherence verification for a planned activity
+    enum AdherenceStatus: String, Codable {
+        case pending = "pending"       // Not yet verified
+        case verified = "verified"     // Completed as planned (>80% of expected steps)
+        case partial = "partial"       // Did some but not all (40-80%)
+        case missed = "missed"         // Did not complete (<40%)
+    }
+
+    // MARK: - Day Checkpoint System
+
+    /// Progress checkpoints throughout the day to monitor if user is on track
+    struct DayCheckpoints: Codable {
+        let date: Date
+        var checkpoints: [Checkpoint]
+        var lastEvaluated: Date?
+
+        struct Checkpoint: Codable, Identifiable {
+            let id: UUID
+            let hour: Int                 // Hour of day (10, 13, 16, 19)
+            let targetSteps: Int          // Expected steps by this time
+            var actualSteps: Int?
+            var evaluatedAt: Date?
+            var status: CheckpointStatus
+            var notificationSent: Bool
+
+            enum CheckpointStatus: String, Codable {
+                case pending = "pending"
+                case onTrack = "on_track"   // Within 20% of target
+                case behind = "behind"      // More than 20% below target
+                case ahead = "ahead"        // More than 20% above target
+            }
+
+            init(hour: Int, targetSteps: Int) {
+                self.id = UUID()
+                self.hour = hour
+                self.targetSteps = targetSteps
+                self.actualSteps = nil
+                self.evaluatedAt = nil
+                self.status = .pending
+                self.notificationSent = false
+            }
+        }
+
+        /// Default checkpoint hours: 10am, 1pm, 4pm, 7pm
+        static let defaultCheckpointHours = [10, 13, 16, 19]
+
+        /// Create checkpoints for a day with step targets
+        static func create(for date: Date, goalSteps: Int) -> DayCheckpoints {
+            // Progressive targets: 25%, 50%, 75%, 90% of goal
+            let percentages: [Double] = [0.25, 0.50, 0.75, 0.90]
+            let checkpoints = zip(defaultCheckpointHours, percentages).map { hour, pct in
+                Checkpoint(hour: hour, targetSteps: Int(Double(goalSteps) * pct))
+            }
+            return DayCheckpoints(date: date, checkpoints: checkpoints, lastEvaluated: nil)
+        }
+    }
+
     // MARK: - Main Planning Logic
 
     /// Generate a smart daily plan for the given date
+    /// Uses day-of-week specific patterns when available (e.g., "On Tuesdays, you walk at 7am and 12pm")
     func generateDailyPlan(for date: Date) async -> DailyMovementPlan {
         await MainActor.run { isAnalyzing = true }
         defer { Task { await MainActor.run { isAnalyzing = false } } }
@@ -225,14 +357,29 @@ class SmartPlannerEngine: ObservableObject {
             currentTime: isToday ? Date() : calendar.startOfDay(for: date)
         )
 
-        // 6. Create optimal activity plan
+        // 6. Get day-specific patterns if available
+        // This enables personalized planning: "On Tuesdays, you typically walk at 7am and 12pm"
+        let dayPattern = getPatternForDate(date)
+        let daySpecificPeakHours = dayPattern?.peakActivityHours
+        let daySpecificSuccessRates = dayPattern?.bestSlotSuccessRates
+
+        #if DEBUG
+        if let pattern = dayPattern {
+            let dayName = calendar.weekdaySymbols[calendar.component(.weekday, from: date) - 1]
+            print("SmartPlannerEngine: Using \(dayName)-specific patterns - peaks at \(pattern.peakActivityHours)")
+        }
+        #endif
+
+        // 7. Create optimal activity plan using day-specific patterns
         let activities = createOptimalPlan(
             stepsNeeded: stepsNeeded,
             availableSlots: availableSlots,
             walkableMeetings: walkableMeetings,
             patterns: userPatterns ?? .defaults,
             adherence: planAdherence ?? .initial,
-            prefs: prefs
+            prefs: prefs,
+            daySpecificPeakHours: daySpecificPeakHours,
+            daySpecificSuccessRates: daySpecificSuccessRates
         )
 
         // 7. Calculate confidence and reasoning
@@ -436,7 +583,9 @@ class SmartPlannerEngine: ObservableObject {
         walkableMeetings: [WalkableMeeting],
         patterns: UserActivityPatterns,
         adherence: PlanAdherence,
-        prefs: UserPreferences
+        prefs: UserPreferences,
+        daySpecificPeakHours: [Int]? = nil,
+        daySpecificSuccessRates: [Int: Double]? = nil
     ) -> [PlannedActivity] {
 
         guard stepsNeeded > 0 else { return [] }
@@ -450,27 +599,37 @@ class SmartPlannerEngine: ObservableObject {
             .reduce(0) { $0 + $1.estimatedSteps }
         remainingSteps -= walkingMeetingSteps
 
+        // Use day-specific peak hours if available, otherwise fall back to general patterns
+        // This is key for personalized planning: "On Tuesdays you walk at 7am and 12pm"
+        let effectivePeakHours = daySpecificPeakHours ?? patterns.peakActivityHours
+
         // Strategy: Prioritize slots based on user patterns and preferences
         let scoredSlots = availableSlots
             .filter { !$0.isDuringMeal } // Exclude meal times
             .map { slot -> (slot: AvailableSlot, score: Double) in
                 var score = 0.0
-
-                // Prefer slots that match user's best activity hours
                 let hour = Calendar.current.component(.hour, from: slot.start)
-                if patterns.peakActivityHours.contains(hour) { score += 0.3 }
+
+                // Prefer slots that match day-specific activity hours (highest priority)
+                if effectivePeakHours.contains(hour) { score += 0.4 }
+
+                // Consider day-specific hour success rates if available
+                if let successRates = daySpecificSuccessRates,
+                   let hourSuccessRate = successRates[hour] {
+                    score += hourSuccessRate * 0.35  // Strong weight for proven success
+                }
 
                 // Prefer user's preferred time
-                if slot.isPreferredTime { score += 0.25 }
+                if slot.isPreferredTime { score += 0.2 }
 
                 // Prefer longer slots for main activities
-                if slot.duration >= 20 { score += 0.2 }
-                if slot.duration >= 30 { score += 0.15 }
+                if slot.duration >= 20 { score += 0.15 }
+                if slot.duration >= 30 { score += 0.1 }
 
-                // Consider adherence data
+                // Consider general adherence data (lower priority than day-specific)
                 let timeOfDay = categorizeTimeOfDay(hour)
                 if let completionRate = adherence.bestTimeSlots[timeOfDay] {
-                    score += completionRate * 0.3
+                    score += completionRate * 0.15
                 }
 
                 return (slot, score)
@@ -826,6 +985,11 @@ class SmartPlannerEngine: ObservableObject {
            let adherence = try? JSONDecoder().decode(PlanAdherence.self, from: data) {
             planAdherence = adherence
         }
+
+        if let data = UserDefaults.standard.data(forKey: dayOfWeekPatternsKey),
+           let patterns = try? JSONDecoder().decode(DayOfWeekPatterns.self, from: data) {
+            dayOfWeekPatterns = patterns
+        }
     }
 
     private func savePatterns(_ patterns: UserActivityPatterns) {
@@ -838,5 +1002,176 @@ class SmartPlannerEngine: ObservableObject {
         if let data = try? JSONEncoder().encode(adherence) {
             UserDefaults.standard.set(data, forKey: adherenceKey)
         }
+    }
+
+    private func saveDayOfWeekPatterns(_ patterns: DayOfWeekPatterns) {
+        if let data = try? JSONEncoder().encode(patterns) {
+            UserDefaults.standard.set(data, forKey: dayOfWeekPatternsKey)
+        }
+    }
+
+    // MARK: - Day-of-Week Pattern Analysis
+
+    /// Analyze 60 days of HealthKit data to learn day-of-week specific patterns
+    /// "On Tuesdays, you typically walk at 7am and 12pm with 2500 steps each"
+    func analyzeDayOfWeekPatterns() async {
+        await MainActor.run { isAnalyzing = true }
+        defer { Task { await MainActor.run { isAnalyzing = false } } }
+
+        let calendar = Calendar.current
+
+        // Fetch 60 days of hourly step data
+        guard let hourlyData = try? await healthKitManager.fetchHourlyStepsForDays(days: 60) else {
+            #if DEBUG
+            print("SmartPlannerEngine: Failed to fetch hourly data for day-of-week analysis")
+            #endif
+            return
+        }
+
+        // Group data by weekday
+        var weekdayData: [Int: [(date: Date, hourlySteps: [Int: Int], totalSteps: Int)]] = [:]
+        for weekday in 1...7 {
+            weekdayData[weekday] = []
+        }
+
+        for (date, hourlySteps) in hourlyData {
+            let weekday = calendar.component(.weekday, from: date)
+            let totalSteps = hourlySteps.values.reduce(0, +)
+            weekdayData[weekday]?.append((date: date, hourlySteps: hourlySteps, totalSteps: totalSteps))
+        }
+
+        // Build patterns for each day of the week
+        var newPatterns = DayOfWeekPatterns.empty
+
+        for weekday in 1...7 {
+            guard let dayData = weekdayData[weekday], !dayData.isEmpty else { continue }
+
+            // Calculate average steps per hour across all samples of this weekday
+            var hourlyAverages: [Int: Int] = [:]
+            var hourlyCounts: [Int: Int] = [:]
+
+            for sample in dayData {
+                for (hour, steps) in sample.hourlySteps {
+                    hourlyAverages[hour, default: 0] += steps
+                    hourlyCounts[hour, default: 0] += 1
+                }
+            }
+
+            // Convert to averages
+            for (hour, total) in hourlyAverages {
+                if let count = hourlyCounts[hour], count > 0 {
+                    hourlyAverages[hour] = total / count
+                }
+            }
+
+            // Find peak activity hours (top 5 hours by average steps)
+            let peakHours = hourlyAverages
+                .sorted { $0.value > $1.value }
+                .prefix(5)
+                .map { $0.key }
+                .sorted()
+
+            // Calculate average daily steps for this weekday
+            let avgDailySteps = dayData.isEmpty ? 0 : dayData.map { $0.totalSteps }.reduce(0, +) / dayData.count
+
+            // Get existing adherence rate or default to 0.5
+            let existingAdherenceRate = dayOfWeekPatterns?.dayPatterns[weekday]?.adherenceRate ?? 0.5
+            let existingSuccessRates = dayOfWeekPatterns?.dayPatterns[weekday]?.bestSlotSuccessRates ?? [:]
+
+            newPatterns.dayPatterns[weekday] = DayOfWeekPatterns.DayPattern(
+                weekday: weekday,
+                peakActivityHours: peakHours,
+                hourlyStepAverages: hourlyAverages,
+                totalDaysSampled: dayData.count,
+                averageDailySteps: avgDailySteps,
+                adherenceRate: existingAdherenceRate,
+                bestSlotSuccessRates: existingSuccessRates
+            )
+        }
+
+        newPatterns.lastUpdated = Date()
+
+        // Save and publish
+        await MainActor.run {
+            self.dayOfWeekPatterns = newPatterns
+        }
+        saveDayOfWeekPatterns(newPatterns)
+
+        #if DEBUG
+        print("SmartPlannerEngine: Day-of-week patterns analyzed")
+        for weekday in 1...7 {
+            if let pattern = newPatterns.dayPatterns[weekday] {
+                let dayName = calendar.weekdaySymbols[weekday - 1]
+                print("  \(dayName): avg \(pattern.averageDailySteps) steps, peaks at \(pattern.peakActivityHours)")
+            }
+        }
+        #endif
+    }
+
+    /// Get the pattern for a specific date (uses day of week)
+    func getPatternForDate(_ date: Date) -> DayOfWeekPatterns.DayPattern? {
+        return dayOfWeekPatterns?.pattern(for: date)
+    }
+
+    // MARK: - Adherence Verification
+
+    /// Verify if user actually walked during a planned activity window
+    func verifyActivityAdherence(_ activity: PlannedActivity) async -> PlannedActivity {
+        let startTime = activity.startTime
+        let endTime = activity.slot.end
+
+        let actualSteps = (try? await healthKitManager.fetchSteps(from: startTime, to: endTime)) ?? 0
+
+        var verifiedActivity = activity
+        verifiedActivity.actualSteps = actualSteps
+        verifiedActivity.verifiedAt = Date()
+
+        // Determine adherence status based on completion ratio
+        let expectedSteps = activity.estimatedSteps
+        let ratio = expectedSteps > 0 ? Double(actualSteps) / Double(expectedSteps) : 0
+
+        if ratio >= 0.8 {
+            verifiedActivity.adherenceStatus = .verified
+        } else if ratio >= 0.4 {
+            verifiedActivity.adherenceStatus = .partial
+        } else {
+            verifiedActivity.adherenceStatus = .missed
+        }
+
+        // Update day-of-week adherence data
+        await updateDayOfWeekAdherence(for: activity, wasCompleted: ratio >= 0.8)
+
+        #if DEBUG
+        print("SmartPlannerEngine: Verified activity - expected \(expectedSteps), actual \(actualSteps) (\(Int(ratio * 100))%)")
+        #endif
+
+        return verifiedActivity
+    }
+
+    /// Update adherence statistics for a specific day of week and hour
+    private func updateDayOfWeekAdherence(for activity: PlannedActivity, wasCompleted: Bool) async {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: activity.startTime)
+        let hour = calendar.component(.hour, from: activity.startTime)
+
+        guard var patterns = dayOfWeekPatterns,
+              var dayPattern = patterns.dayPatterns[weekday] else { return }
+
+        // Update hour success rate with exponential moving average
+        let currentRate = dayPattern.bestSlotSuccessRates[hour] ?? 0.5
+        let newRate = wasCompleted ? 1.0 : 0.0
+        dayPattern.bestSlotSuccessRates[hour] = (currentRate + newRate) / 2.0
+
+        // Update overall day adherence rate
+        let totalCompleted = wasCompleted ? 1 : 0
+        dayPattern.adherenceRate = (dayPattern.adherenceRate + Double(totalCompleted)) / 2.0
+
+        patterns.dayPatterns[weekday] = dayPattern
+        patterns.lastUpdated = Date()
+
+        await MainActor.run {
+            self.dayOfWeekPatterns = patterns
+        }
+        saveDayOfWeekPatterns(patterns)
     }
 }

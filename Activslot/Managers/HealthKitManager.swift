@@ -217,6 +217,94 @@ class HealthKitManager: ObservableObject {
         }
     }
 
+    // MARK: - Hourly Step Data (for day-of-week pattern learning)
+
+    /// Fetch steps broken down by hour for a specific date
+    /// Returns dictionary: hour (0-23) -> step count
+    func fetchHourlySteps(for date: Date) async throws -> [Int: Int] {
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            throw HealthKitError.dataNotAvailable
+        }
+
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            throw HealthKitError.dataNotAvailable
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        let interval = DateComponents(hour: 1)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: stepType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum,
+                anchorDate: startOfDay,
+                intervalComponents: interval
+            )
+
+            query.initialResultsHandler = { _, results, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                var hourlySteps: [Int: Int] = [:]
+
+                results?.enumerateStatistics(from: startOfDay, to: endOfDay) { statistics, _ in
+                    let hour = calendar.component(.hour, from: statistics.startDate)
+                    let steps = statistics.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                    hourlySteps[hour] = Int(steps)
+                }
+
+                continuation.resume(returning: hourlySteps)
+            }
+
+            healthStore.execute(query)
+        }
+    }
+
+    /// Fetch steps in a specific time window (for adherence verification)
+    func fetchSteps(from startDate: Date, to endDate: Date) async throws -> Int {
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            throw HealthKitError.dataNotAvailable
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: stepType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                let steps = result?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                continuation.resume(returning: Int(steps))
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Fetch hourly step data for multiple days (for pattern learning)
+    /// Returns: [date: [hour: steps]]
+    func fetchHourlyStepsForDays(days: Int) async throws -> [Date: [Int: Int]] {
+        var result: [Date: [Int: Int]] = [:]
+        let calendar = Calendar.current
+
+        for dayOffset in 0..<days {
+            guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: Date()) else { continue }
+            let normalizedDate = calendar.startOfDay(for: date)
+
+            if let hourlyData = try? await fetchHourlySteps(for: date) {
+                result[normalizedDate] = hourlyData
+            }
+        }
+
+        return result
+    }
+
     // MARK: - Historical Data
 
     func fetchWeeklyStepAverage() async throws -> Int {

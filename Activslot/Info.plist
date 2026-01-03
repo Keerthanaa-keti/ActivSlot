@@ -37,5 +37,15 @@
 		<string>msauthv2</string>
 		<string>msauthv3</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.activslot.healthapp.eveningPlanSync</string>
+		<string>com.activslot.healthapp.checkpointEvaluation</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
 </dict>
 </plist>

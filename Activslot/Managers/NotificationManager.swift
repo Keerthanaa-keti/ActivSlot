@@ -10,6 +10,9 @@ enum NotificationIdentifier {
     static let afternoonCheckIn = "afternoon-checkin"
     static let daySummary = "day-summary"
     static let streakAtRisk = "streak-at-risk"
+    static let planReady = "plan-ready"
+    static let behindOnSteps = "behind-on-steps"
+    static let walkableMeetingPreNotification = "walkable-meeting-pre-"
 }
 
 // MARK: - Tomorrow Briefing Data
@@ -391,6 +394,188 @@ class NotificationManager: ObservableObject {
         }
     }
 
+    // MARK: - Smart Planner Notifications
+
+    /// Schedule notification when tomorrow's plan is ready (sent in evening)
+    func schedulePlanReadyNotification(plan: SmartPlannerEngine.DailyMovementPlan) {
+        guard isAuthorized else { return }
+
+        // Cancel any existing plan ready notification
+        cancelNotification(identifier: NotificationIdentifier.planReady)
+
+        let content = UNMutableNotificationContent()
+        content.title = "Tomorrow's Plan Ready"
+
+        // Build summary
+        let walkCount = plan.activities.count
+        let totalSteps = plan.totalPlannedSteps
+        let walkableMeetingCount = plan.walkableMeetings.count
+
+        var bodyParts: [String] = []
+        bodyParts.append("\(walkCount) walk\(walkCount == 1 ? "" : "s") planned (~\(totalSteps.formatted()) steps)")
+
+        if walkableMeetingCount > 0 {
+            bodyParts.append("\(walkableMeetingCount) walkable meeting\(walkableMeetingCount == 1 ? "" : "s") identified")
+        }
+
+        if plan.isOnTrack {
+            bodyParts.append("On track to exceed your goal!")
+        }
+
+        content.body = bodyParts.joined(separator: "\n")
+        content.sound = .default
+        content.categoryIdentifier = "PLAN_READY"
+
+        content.userInfo = [
+            "type": "planReady",
+            "date": plan.date.timeIntervalSince1970,
+            "walkCount": walkCount,
+            "totalSteps": totalSteps
+        ]
+
+        // Schedule for 8 PM today
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: Date())
+        components.hour = 20
+        components.minute = 0
+
+        guard let scheduledDate = calendar.date(from: components) else { return }
+
+        // If already past 8 PM, don't schedule (plan should already be ready)
+        guard scheduledDate > Date() else {
+            // Send immediately instead
+            let immediateTrigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: NotificationIdentifier.planReady,
+                content: content,
+                trigger: immediateTrigger
+            )
+            UNUserNotificationCenter.current().add(request)
+            return
+        }
+
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: calendar.dateComponents([.hour, .minute], from: scheduledDate),
+            repeats: false
+        )
+
+        let request = UNNotificationRequest(
+            identifier: NotificationIdentifier.planReady,
+            content: content,
+            trigger: trigger
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            #if DEBUG
+            if let error = error {
+                print("Error scheduling plan ready notification: \(error)")
+            }
+            #endif
+        }
+    }
+
+    /// Schedule notification when user is behind on steps at a checkpoint
+    func scheduleBehindOnStepsNotification(deficit: Int, suggestedSlot: SmartPlannerEngine.PlannedActivity.TimeSlot?) async {
+        guard isAuthorized else { return }
+
+        // Cancel any existing behind notification
+        cancelNotification(identifier: NotificationIdentifier.behindOnSteps)
+
+        let content = UNMutableNotificationContent()
+        content.title = "You're \(deficit.formatted()) steps behind"
+
+        var bodyText: String
+        if let slot = suggestedSlot {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            let slotTime = formatter.string(from: slot.start)
+            let duration = Int(slot.end.timeIntervalSince(slot.start) / 60)
+            bodyText = "A \(duration)-minute walk at \(slotTime) can help you catch up!"
+        } else {
+            bodyText = "Try taking a quick walk when you can to get back on track."
+        }
+
+        content.body = bodyText
+        content.sound = .default
+        content.categoryIdentifier = "BEHIND_ON_STEPS"
+
+        content.userInfo = [
+            "type": "behindOnSteps",
+            "deficit": deficit,
+            "hasSuggestedSlot": suggestedSlot != nil
+        ]
+
+        // Schedule immediately
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+
+        let request = UNNotificationRequest(
+            identifier: NotificationIdentifier.behindOnSteps,
+            content: content,
+            trigger: trigger
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            #if DEBUG
+            if let error = error {
+                print("Error scheduling behind on steps notification: \(error)")
+            }
+            #endif
+        }
+    }
+
+    /// Schedule pre-notification for walkable meeting (15 minutes before)
+    func scheduleWalkableMeetingPreNotification(for meeting: SmartPlannerEngine.WalkableMeeting) {
+        guard isAuthorized && walkableMeetingRemindersEnabled else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Walkable meeting in 15 min"
+        content.body = "\"\(meeting.title)\" - Get ready to walk and talk! (~\(meeting.estimatedSteps.formatted()) steps)"
+        content.sound = .default
+        content.categoryIdentifier = "WALKABLE_MEETING"
+
+        content.userInfo = [
+            "type": "walkableMeetingPre",
+            "meetingId": meeting.id.uuidString,
+            "meetingTitle": meeting.title
+        ]
+
+        // Schedule 15 minutes before meeting
+        let triggerDate = meeting.startTime.addingTimeInterval(-15 * 60)
+        guard triggerDate > Date() else { return }
+
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: triggerDate.timeIntervalSinceNow,
+            repeats: false
+        )
+
+        let request = UNNotificationRequest(
+            identifier: "\(NotificationIdentifier.walkableMeetingPreNotification)\(meeting.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            #if DEBUG
+            if let error = error {
+                print("Error scheduling walkable meeting pre-notification: \(error)")
+            }
+            #endif
+        }
+    }
+
+    /// Schedule pre-notifications for all walkable meetings in a plan
+    func scheduleWalkableMeetingPreNotifications(for plan: SmartPlannerEngine.DailyMovementPlan) {
+        guard isAuthorized && walkableMeetingRemindersEnabled else { return }
+
+        // Cancel existing pre-notifications
+        cancelNotificationsWithPrefix(NotificationIdentifier.walkableMeetingPreNotification)
+
+        // Schedule new pre-notifications
+        for meeting in plan.walkableMeetings {
+            scheduleWalkableMeetingPreNotification(for: meeting)
+        }
+    }
+
     // MARK: - Daily Refresh
 
     /// Call this method to refresh all notifications for today/tomorrow
@@ -508,10 +693,38 @@ class NotificationManager: ObservableObject {
             options: []
         )
 
+        // Plan Ready actions
+        let viewPlanAction = UNNotificationAction(
+            identifier: "VIEW_PLAN",
+            title: "View Plan",
+            options: [.foreground]
+        )
+        let planReadyCategory = UNNotificationCategory(
+            identifier: "PLAN_READY",
+            actions: [viewPlanAction, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // Behind on Steps actions
+        let addWalkAction = UNNotificationAction(
+            identifier: "ADD_WALK",
+            title: "Add Walk to Calendar",
+            options: [.foreground]
+        )
+        let behindCategory = UNNotificationCategory(
+            identifier: "BEHIND_ON_STEPS",
+            actions: [addWalkAction, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
         UNUserNotificationCenter.current().setNotificationCategories([
             eveningCategory,
             walkableCategory,
-            workoutCategory
+            workoutCategory,
+            planReadyCategory,
+            behindCategory
         ])
     }
 
