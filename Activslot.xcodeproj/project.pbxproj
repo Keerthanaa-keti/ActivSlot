@@ -47,6 +47,7 @@
 		BUNDL0000001 /* Bundle+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BUNDL0000011 /* Bundle+Extensions.swift */; };
 		LEGAL0000001 /* LegalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = LEGAL0000011 /* LegalViews.swift */; };
 		DPSYN0000001 /* DailyPlanSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DPSYN0000011 /* DailyPlanSyncCoordinator.swift */; };
+		SMINT0000001 /* SmartPlannerIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMINT0000011 /* SmartPlannerIntroView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -81,6 +82,7 @@
 		72C94292DDDD0002CAFBCC /* ScheduleActivitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleActivitySheet.swift; sourceTree = "<group>"; };
 		72C94296FFFF0001CAFBCC /* AutopilotManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutopilotManager.swift; sourceTree = "<group>"; };
 		72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalWhyView.swift; sourceTree = "<group>"; };
+		SMINT0000011 /* SmartPlannerIntroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlannerIntroView.swift; sourceTree = "<group>"; };
 		72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityProfileView.swift; sourceTree = "<group>"; };
 		72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutopilotSettingsView.swift; sourceTree = "<group>"; };
 		72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlannerEngine.swift; sourceTree = "<group>"; };
@@ -234,6 +236,7 @@
 				001A00018 /* PermissionsView.swift */,
 				001A00019 /* PreferencesView.swift */,
 				72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */,
+				SMINT0000011 /* SmartPlannerIntroView.swift */,
 			);
 			path = Onboarding;
 			sourceTree = "<group>";
@@ -368,6 +371,7 @@
 				72C942A3BBBB0001CAFBCC /* TestDataManager.swift in Sources */,
 				STREAK000001 /* StreakManager.swift in Sources */,
 				DPSYN0000001 /* DailyPlanSyncCoordinator.swift in Sources */,
+				SMINT0000001 /* SmartPlannerIntroView.swift in Sources */,
 				CELEB0000001 /* CelebrationView.swift in Sources */,
 				BUNDL0000001 /* Bundle+Extensions.swift in Sources */,
 				LEGAL0000001 /* LegalViews.swift in Sources */,

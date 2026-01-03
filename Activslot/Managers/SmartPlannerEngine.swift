@@ -368,6 +368,7 @@ class SmartPlannerEngine: ObservableObject {
             let dayName = calendar.weekdaySymbols[calendar.component(.weekday, from: date) - 1]
             print("SmartPlannerEngine: Using \(dayName)-specific patterns - peaks at \(pattern.peakActivityHours)")
         }
+        print("SmartPlannerEngine: Steps needed: \(stepsNeeded), Available slots: \(availableSlots.count), Walkable meetings: \(walkableMeetings.filter { $0.isRecommended }.count)")
         #endif
 
         // 7. Create optimal activity plan using day-specific patterns
@@ -538,6 +539,15 @@ class SmartPlannerEngine: ObservableObject {
             }
         }
 
+        #if DEBUG
+        print("SmartPlannerEngine: Found \(slots.count) available slots")
+        for slot in slots.prefix(5) {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            print("  - \(formatter.string(from: slot.start)) to \(formatter.string(from: slot.end)): \(slot.duration) min, meal: \(slot.isDuringMeal)")
+        }
+        #endif
+
         return slots
     }
 
@@ -593,19 +603,41 @@ class SmartPlannerEngine: ObservableObject {
         var activities: [PlannedActivity] = []
         var remainingSteps = stepsNeeded
 
-        // Calculate steps from walkable meetings first
+        // Calculate steps from walkable meetings - but only credit 30% since users often
+        // don't actually walk during all recommended meetings
+        // This ensures we still schedule backup walks for reliability
         let walkingMeetingSteps = walkableMeetings
             .filter { $0.isRecommended }
             .reduce(0) { $0 + $1.estimatedSteps }
-        remainingSteps -= walkingMeetingSteps
+        let creditedMeetingSteps = Int(Double(walkingMeetingSteps) * 0.30)
+        remainingSteps -= creditedMeetingSteps
+
+        // Always schedule at least one walk even if walkable meetings could cover goal
+        // This ensures the user has explicit walk times blocked
+        let minimumWalksToSchedule = remainingSteps <= 0 ? 1 : 0
+        if remainingSteps <= 0 && minimumWalksToSchedule > 0 {
+            remainingSteps = 2000 // Schedule at least one ~20min walk
+        }
+
+        #if DEBUG
+        print("SmartPlannerEngine: createOptimalPlan - stepsNeeded: \(stepsNeeded), walkingMeetingSteps: \(walkingMeetingSteps), creditedMeetingSteps: \(creditedMeetingSteps), remainingSteps: \(remainingSteps)")
+        print("SmartPlannerEngine: availableSlots: \(availableSlots.count), non-meal slots: \(availableSlots.filter { !$0.isDuringMeal }.count)")
+        #endif
 
         // Use day-specific peak hours if available, otherwise fall back to general patterns
         // This is key for personalized planning: "On Tuesdays you walk at 7am and 12pm"
         let effectivePeakHours = daySpecificPeakHours ?? patterns.peakActivityHours
 
+        // Strategy: Prioritize non-meal slots, but use meal slots as fallback
+        let nonMealSlots = availableSlots.filter { !$0.isDuringMeal }
+        let slotsToUse = nonMealSlots.isEmpty ? availableSlots : nonMealSlots
+
+        #if DEBUG
+        print("SmartPlannerEngine: Using \(slotsToUse.count) slots (\(nonMealSlots.isEmpty ? "including meal slots as fallback" : "non-meal only"))")
+        #endif
+
         // Strategy: Prioritize slots based on user patterns and preferences
-        let scoredSlots = availableSlots
-            .filter { !$0.isDuringMeal } // Exclude meal times
+        let scoredSlots = slotsToUse
             .map { slot -> (slot: AvailableSlot, score: Double) in
                 var score = 0.0
                 let hour = Calendar.current.component(.hour, from: slot.start)

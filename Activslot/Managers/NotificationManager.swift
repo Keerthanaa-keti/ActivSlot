@@ -13,6 +13,25 @@ enum NotificationIdentifier {
     static let planReady = "plan-ready"
     static let behindOnSteps = "behind-on-steps"
     static let walkableMeetingPreNotification = "walkable-meeting-pre-"
+    static let walkReminder = "walk-reminder-"
+}
+
+// MARK: - Notification Action Identifiers
+
+enum NotificationAction {
+    static let snooze15Min = "SNOOZE_15_MIN"
+    static let snooze1Hour = "SNOOZE_1_HOUR"
+    static let snoozeEndOfDay = "SNOOZE_END_OF_DAY"
+    static let startWalk = "START_WALK"
+    static let dismiss = "DISMISS"
+}
+
+// MARK: - Notification Categories
+
+enum NotificationCategory {
+    static let walkReminder = "WALK_REMINDER"
+    static let behindOnSteps = "BEHIND_ON_STEPS"
+    static let eveningBriefing = "EVENING_BRIEFING"
 }
 
 // MARK: - Tomorrow Briefing Data
@@ -93,6 +112,22 @@ class NotificationManager: ObservableObject {
 
     @Published var isAuthorized = false
 
+    // Snooze state
+    @Published var snoozedUntil: Date? {
+        didSet {
+            if let date = snoozedUntil {
+                UserDefaults.standard.set(date.timeIntervalSince1970, forKey: "notification_snoozedUntil")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "notification_snoozedUntil")
+            }
+        }
+    }
+
+    var isSnoozed: Bool {
+        guard let snoozedUntil = snoozedUntil else { return false }
+        return Date() < snoozedUntil
+    }
+
     // Notification Settings (stored in UserDefaults)
     @Published var eveningBriefingEnabled: Bool {
         didSet { UserDefaults.standard.set(eveningBriefingEnabled, forKey: "notification_eveningBriefing") }
@@ -128,7 +163,192 @@ class NotificationManager: ObservableObject {
 
         self.walkableMeetingLeadTime = UserDefaults.standard.object(forKey: "notification_walkableLeadTime") as? Int ?? 10
 
+        // Load snooze state
+        if let snoozedTimestamp = UserDefaults.standard.object(forKey: "notification_snoozedUntil") as? Double {
+            let date = Date(timeIntervalSince1970: snoozedTimestamp)
+            self.snoozedUntil = date > Date() ? date : nil
+        }
+
         checkAuthorizationStatus()
+        registerNotificationCategories()
+    }
+
+    // MARK: - Notification Categories Registration
+
+    func registerNotificationCategories() {
+        // Common actions
+        let dismissAction = UNNotificationAction(
+            identifier: NotificationAction.dismiss,
+            title: "Dismiss",
+            options: []
+        )
+
+        // Snooze actions
+        let snooze15Min = UNNotificationAction(
+            identifier: NotificationAction.snooze15Min,
+            title: "Snooze 15 min",
+            options: []
+        )
+
+        let snooze1Hour = UNNotificationAction(
+            identifier: NotificationAction.snooze1Hour,
+            title: "Snooze 1 hour",
+            options: []
+        )
+
+        let snoozeEndOfDay = UNNotificationAction(
+            identifier: NotificationAction.snoozeEndOfDay,
+            title: "Snooze until tomorrow",
+            options: []
+        )
+
+        let startWalk = UNNotificationAction(
+            identifier: NotificationAction.startWalk,
+            title: "Start Walk",
+            options: [.foreground]
+        )
+
+        // Walk reminder category (with full snooze options)
+        let walkReminderCategory = UNNotificationCategory(
+            identifier: NotificationCategory.walkReminder,
+            actions: [startWalk, snooze15Min, snooze1Hour, snoozeEndOfDay],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // Behind on steps category (with snooze options)
+        let behindOnStepsCategory = UNNotificationCategory(
+            identifier: NotificationCategory.behindOnSteps,
+            actions: [startWalk, snooze15Min, snooze1Hour],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // Evening Briefing category
+        let planAction = UNNotificationAction(
+            identifier: "PLAN_DAY",
+            title: "Plan My Day",
+            options: [.foreground]
+        )
+        let eveningCategory = UNNotificationCategory(
+            identifier: NotificationCategory.eveningBriefing,
+            actions: [planAction, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // Walkable Meeting category
+        let startWalkingAction = UNNotificationAction(
+            identifier: "START_WALKING",
+            title: "Start Walking",
+            options: [.foreground]
+        )
+        let walkableCategory = UNNotificationCategory(
+            identifier: "WALKABLE_MEETING",
+            actions: [startWalkingAction, snooze15Min, snooze1Hour],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // Workout Reminder category
+        let startWorkoutAction = UNNotificationAction(
+            identifier: "START_WORKOUT",
+            title: "Let's Go!",
+            options: [.foreground]
+        )
+        let workoutCategory = UNNotificationCategory(
+            identifier: "WORKOUT_REMINDER",
+            actions: [startWorkoutAction, snooze15Min],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // Plan Ready category
+        let viewPlanAction = UNNotificationAction(
+            identifier: "VIEW_PLAN",
+            title: "View Plan",
+            options: [.foreground]
+        )
+        let planReadyCategory = UNNotificationCategory(
+            identifier: "PLAN_READY",
+            actions: [viewPlanAction, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([
+            walkReminderCategory,
+            behindOnStepsCategory,
+            eveningCategory,
+            walkableCategory,
+            workoutCategory,
+            planReadyCategory
+        ])
+    }
+
+    // MARK: - Snooze Methods
+
+    func snooze(for duration: SnoozeDuration) {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch duration {
+        case .fifteenMinutes:
+            snoozedUntil = calendar.date(byAdding: .minute, value: 15, to: now)
+        case .oneHour:
+            snoozedUntil = calendar.date(byAdding: .hour, value: 1, to: now)
+        case .endOfDay:
+            // Set to midnight tonight (start of tomorrow)
+            var components = calendar.dateComponents([.year, .month, .day], from: now)
+            components.day! += 1
+            components.hour = 0
+            components.minute = 0
+            snoozedUntil = calendar.date(from: components)
+        }
+
+        // Cancel pending walk notifications
+        cancelAllWalkReminders()
+    }
+
+    func clearSnooze() {
+        snoozedUntil = nil
+    }
+
+    enum SnoozeDuration {
+        case fifteenMinutes
+        case oneHour
+        case endOfDay
+    }
+
+    // MARK: - Handle Notification Actions
+
+    func handleNotificationAction(identifier: String, notificationIdentifier: String, userInfo: [AnyHashable: Any]) {
+        switch identifier {
+        case NotificationAction.snooze15Min:
+            snooze(for: .fifteenMinutes)
+        case NotificationAction.snooze1Hour:
+            snooze(for: .oneHour)
+        case NotificationAction.snoozeEndOfDay:
+            snooze(for: .endOfDay)
+        case NotificationAction.startWalk:
+            // This is handled by the app delegate to open the walk screen
+            break
+        default:
+            break
+        }
+    }
+
+    func cancelAllWalkReminders() {
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { requests in
+            let walkIdentifiers = requests
+                .filter { $0.identifier.hasPrefix(NotificationIdentifier.walkReminder) ||
+                         $0.identifier.hasPrefix(NotificationIdentifier.walkableMeetingPrefix) ||
+                         $0.identifier == NotificationIdentifier.behindOnSteps }
+                .map { $0.identifier }
+
+            center.removePendingNotificationRequests(withIdentifiers: walkIdentifiers)
+        }
     }
 
     // MARK: - Authorization
@@ -478,6 +698,14 @@ class NotificationManager: ObservableObject {
     func scheduleBehindOnStepsNotification(deficit: Int, suggestedSlot: SmartPlannerEngine.PlannedActivity.TimeSlot?) async {
         guard isAuthorized else { return }
 
+        // Check if notifications are snoozed
+        guard !isSnoozed else {
+            #if DEBUG
+            print("NotificationManager: Skipping behind-on-steps notification - snoozed until \(snoozedUntil?.description ?? "unknown")")
+            #endif
+            return
+        }
+
         // Cancel any existing behind notification
         cancelNotification(identifier: NotificationIdentifier.behindOnSteps)
 
@@ -634,98 +862,6 @@ class NotificationManager: ObservableObject {
 
     func cancelAllNotifications() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
-    }
-
-    // MARK: - Notification Categories (for actions)
-
-    func registerNotificationCategories() {
-        // Evening Briefing actions
-        let planAction = UNNotificationAction(
-            identifier: "PLAN_DAY",
-            title: "Plan My Day",
-            options: [.foreground]
-        )
-        let dismissAction = UNNotificationAction(
-            identifier: "DISMISS",
-            title: "Dismiss",
-            options: []
-        )
-        let eveningCategory = UNNotificationCategory(
-            identifier: "EVENING_BRIEFING",
-            actions: [planAction, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        )
-
-        // Walkable Meeting actions
-        let startWalkingAction = UNNotificationAction(
-            identifier: "START_WALKING",
-            title: "Start Walking",
-            options: [.foreground]
-        )
-        let skipAction = UNNotificationAction(
-            identifier: "SKIP",
-            title: "Skip",
-            options: []
-        )
-        let walkableCategory = UNNotificationCategory(
-            identifier: "WALKABLE_MEETING",
-            actions: [startWalkingAction, skipAction],
-            intentIdentifiers: [],
-            options: []
-        )
-
-        // Workout Reminder actions
-        let startWorkoutAction = UNNotificationAction(
-            identifier: "START_WORKOUT",
-            title: "Let's Go!",
-            options: [.foreground]
-        )
-        let snoozeAction = UNNotificationAction(
-            identifier: "SNOOZE",
-            title: "Remind in 15 min",
-            options: []
-        )
-        let workoutCategory = UNNotificationCategory(
-            identifier: "WORKOUT_REMINDER",
-            actions: [startWorkoutAction, snoozeAction],
-            intentIdentifiers: [],
-            options: []
-        )
-
-        // Plan Ready actions
-        let viewPlanAction = UNNotificationAction(
-            identifier: "VIEW_PLAN",
-            title: "View Plan",
-            options: [.foreground]
-        )
-        let planReadyCategory = UNNotificationCategory(
-            identifier: "PLAN_READY",
-            actions: [viewPlanAction, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        )
-
-        // Behind on Steps actions
-        let addWalkAction = UNNotificationAction(
-            identifier: "ADD_WALK",
-            title: "Add Walk to Calendar",
-            options: [.foreground]
-        )
-        let behindCategory = UNNotificationCategory(
-            identifier: "BEHIND_ON_STEPS",
-            actions: [addWalkAction, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        )
-
-        UNUserNotificationCenter.current().setNotificationCategories([
-            eveningCategory,
-            walkableCategory,
-            workoutCategory,
-            planReadyCategory,
-            behindCategory
-        ])
     }
 
     // MARK: - Helpers

@@ -8,6 +8,8 @@ struct SmartPlanView: View {
     @State private var isRefreshing = false
     @State private var showingActivityDetail: SmartPlannerEngine.PlannedActivity?
     @State private var showingWalkableMeetings = false
+    @State private var todayEvents: [CalendarEvent] = []
+    @State private var showTimeline = true
 
     var body: some View {
         NavigationStack {
@@ -16,6 +18,18 @@ struct SmartPlanView: View {
                     // Step Goal Progress Card
                     if let plan = planner.currentDayPlan {
                         SmartStepProgressCard(plan: plan)
+                    }
+
+                    // Checkpoint Progress Bar
+                    CheckpointProgressCard(
+                        currentSteps: planner.currentDayPlan?.estimatedCurrentSteps ?? 0,
+                        goalSteps: userPreferences.dailyStepGoal
+                    )
+
+                    // Day Timeline (Visual Overview)
+                    if let plan = planner.currentDayPlan, !todayEvents.isEmpty {
+                        DayTimelineView(plan: plan, events: todayEvents)
+                            .environmentObject(userPreferences)
                     }
 
                     // Today's Plan
@@ -39,6 +53,9 @@ struct SmartPlanView: View {
                         if !plan.walkableMeetings.isEmpty {
                             WalkableMeetingsSection(meetings: plan.walkableMeetings)
                         }
+
+                        // Why This Plan - Explanation of AI decisions
+                        WhyThisPlanCard(plan: plan, patterns: planner.userPatterns)
 
                         // Plan Insights
                         PlanInsightsCard(plan: plan, patterns: planner.userPatterns)
@@ -85,9 +102,10 @@ struct SmartPlanView: View {
             await planner.analyzeUserPatterns()
         }
 
+        let calendarManager = CalendarManager.shared
+
         #if DEBUG
         // Auto-create sample events for testing if none exist
-        let calendarManager = CalendarManager.shared
         if calendarManager.isAuthorized {
             let events = try? await calendarManager.fetchEvents(for: Date())
             if events?.isEmpty ?? true {
@@ -96,6 +114,13 @@ struct SmartPlanView: View {
             }
         }
         #endif
+
+        // Fetch today's events for timeline
+        if let events = try? await calendarManager.fetchEvents(for: Date()) {
+            await MainActor.run {
+                todayEvents = events
+            }
+        }
 
         _ = await planner.generateDailyPlan(for: Date())
     }
@@ -107,6 +132,12 @@ struct SmartPlanView: View {
     }
 
     private func refreshPlanAsync() async {
+        // Refresh events for timeline
+        if let events = try? await CalendarManager.shared.fetchEvents(for: selectedDate) {
+            await MainActor.run {
+                todayEvents = events
+            }
+        }
         _ = await planner.generateDailyPlan(for: selectedDate)
     }
 }
@@ -288,6 +319,436 @@ struct SmartStepProgressCard: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
+    }
+}
+
+// MARK: - Checkpoint Progress Card
+
+struct CheckpointProgressCard: View {
+    let currentSteps: Int
+    let goalSteps: Int
+
+    // Checkpoint targets: 10am (25%), 1pm (50%), 4pm (75%), 7pm (90%)
+    private let checkpoints: [(hour: Int, label: String, target: Double)] = [
+        (10, "10 AM", 0.25),
+        (13, "1 PM", 0.50),
+        (16, "4 PM", 0.75),
+        (19, "7 PM", 0.90)
+    ]
+
+    private var currentHour: Int {
+        Calendar.current.component(.hour, from: Date())
+    }
+
+    private var activeCheckpointIndex: Int {
+        // Find the next checkpoint (or the last one if past all)
+        for (index, checkpoint) in checkpoints.enumerated() {
+            if currentHour < checkpoint.hour {
+                return max(0, index - 1)
+            }
+        }
+        return checkpoints.count - 1
+    }
+
+    private var nextCheckpoint: (hour: Int, label: String, target: Double)? {
+        checkpoints.first { $0.hour > currentHour }
+    }
+
+    private var currentProgress: Double {
+        guard goalSteps > 0 else { return 0 }
+        return min(1.0, Double(currentSteps) / Double(goalSteps))
+    }
+
+    private var checkpointStatus: CheckpointStatus {
+        guard let next = nextCheckpoint else {
+            // Past all checkpoints - check if goal is met
+            return currentProgress >= 0.9 ? .onTrack : .behind
+        }
+
+        let expectedProgress = next.target - 0.05 // Small buffer
+        if currentProgress >= expectedProgress {
+            return .ahead
+        } else if currentProgress >= expectedProgress - 0.15 {
+            return .onTrack
+        } else {
+            return .behind
+        }
+    }
+
+    enum CheckpointStatus {
+        case ahead, onTrack, behind
+
+        var color: Color {
+            switch self {
+            case .ahead: return .green
+            case .onTrack: return .blue
+            case .behind: return .orange
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .ahead: return "bolt.fill"
+            case .onTrack: return "checkmark.circle.fill"
+            case .behind: return "exclamationmark.triangle.fill"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .ahead: return "Ahead of schedule!"
+            case .onTrack: return "On track"
+            case .behind: return "Behind - time for a walk?"
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack {
+                Image(systemName: "flag.checkered")
+                    .foregroundColor(.blue)
+                Text("Checkpoint Progress")
+                    .font(.headline)
+                Spacer()
+
+                // Status badge
+                HStack(spacing: 4) {
+                    Image(systemName: checkpointStatus.icon)
+                        .font(.caption)
+                    Text(checkpointStatus.message)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(checkpointStatus.color)
+            }
+
+            // Progress bar with checkpoint markers
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background track
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.gray.opacity(0.15))
+                        .frame(height: 12)
+
+                    // Progress fill
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(
+                            LinearGradient(
+                                colors: [checkpointStatus.color.opacity(0.7), checkpointStatus.color],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: geometry.size.width * currentProgress, height: 12)
+                        .animation(.easeOut(duration: 0.5), value: currentProgress)
+
+                    // Checkpoint markers
+                    ForEach(Array(checkpoints.enumerated()), id: \.offset) { index, checkpoint in
+                        let xPosition = geometry.size.width * checkpoint.target
+
+                        VStack(spacing: 2) {
+                            // Marker line
+                            Rectangle()
+                                .fill(index <= activeCheckpointIndex ? Color.green : Color.gray.opacity(0.5))
+                                .frame(width: 2, height: 20)
+
+                            // Label
+                            Text(checkpoint.label)
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                        }
+                        .position(x: xPosition, y: 18)
+                    }
+
+                    // Current position indicator
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 16, height: 16)
+                        .overlay(
+                            Circle()
+                                .fill(checkpointStatus.color)
+                                .frame(width: 10, height: 10)
+                        )
+                        .shadow(color: .black.opacity(0.15), radius: 2)
+                        .position(x: geometry.size.width * currentProgress, y: 6)
+                }
+            }
+            .frame(height: 44)
+
+            // Next checkpoint info
+            if let next = nextCheckpoint {
+                let targetSteps = Int(Double(goalSteps) * next.target)
+                let stepsToGo = max(0, targetSteps - currentSteps)
+
+                HStack {
+                    Text("Next: \(next.label)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    if stepsToGo > 0 {
+                        Text("\(stepsToGo.formatted()) steps to reach checkpoint")
+                            .font(.caption)
+                            .foregroundColor(checkpointStatus.color)
+                    } else {
+                        Text("Checkpoint reached!")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    }
+                }
+            } else {
+                HStack {
+                    Text("All checkpoints passed")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    if currentProgress >= 1.0 {
+                        Text("Goal achieved!")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
+    }
+}
+
+// MARK: - Day Timeline View
+
+struct DayTimelineView: View {
+    let plan: SmartPlannerEngine.DailyMovementPlan
+    let events: [CalendarEvent]
+
+    @EnvironmentObject var userPreferences: UserPreferences
+
+    private let hourHeight: CGFloat = 60
+    private let timeColumnWidth: CGFloat = 50
+
+    private var startHour: Int {
+        max(6, userPreferences.wakeTime.hour)
+    }
+
+    private var endHour: Int {
+        min(22, userPreferences.sleepTime.hour)
+    }
+
+    private var currentHour: Int {
+        Calendar.current.component(.hour, from: Date())
+    }
+
+    private var currentMinute: Int {
+        Calendar.current.component(.minute, from: Date())
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "clock")
+                    .foregroundColor(.blue)
+                Text("Day Timeline")
+                    .font(.headline)
+                Text("(\(eventsInRange.count) events)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("Now: \(formatCurrentTime())")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: true) {
+                    ZStack(alignment: .topLeading) {
+                        // Hour grid lines with event blocks inline
+                        VStack(spacing: 0) {
+                            ForEach(startHour...endHour, id: \.self) { hour in
+                                ZStack(alignment: .topLeading) {
+                                    HStack(alignment: .top, spacing: 8) {
+                                        // Time label
+                                        Text(formatHour(hour))
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .frame(width: timeColumnWidth, alignment: .trailing)
+
+                                        // Grid line
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(height: 1)
+                                    }
+
+                                    // Events starting at this hour
+                                    ForEach(eventsStartingAtHour(hour), id: \.id) { event in
+                                        inlineEventBlock(for: event)
+                                    }
+
+                                    // Activities starting at this hour
+                                    ForEach(activitiesStartingAtHour(hour), id: \.id) { activity in
+                                        inlineActivityBlock(for: activity)
+                                    }
+                                }
+                                .frame(height: hourHeight)
+                                .id(hour)
+                            }
+                        }
+
+                        // Current time indicator
+                        if currentHour >= startHour && currentHour <= endHour {
+                            currentTimeIndicator
+                        }
+                    }
+                }
+                .onAppear {
+                    // Scroll to current hour
+                    if currentHour >= startHour && currentHour <= endHour {
+                        proxy.scrollTo(max(startHour, currentHour - 2), anchor: .top)
+                    }
+                }
+            }
+            .frame(height: min(CGFloat(endHour - startHour + 1) * hourHeight, 350))
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
+    }
+
+    private var eventsInRange: [CalendarEvent] {
+        // Filter to events within the visible time range (excluding all-day events)
+        events.filter { event in
+            guard !event.isAllDay else { return false }
+            let eventHour = Calendar.current.component(.hour, from: event.startDate)
+            // Include events even if they're OOO, but show them differently
+            return eventHour >= startHour && eventHour <= endHour
+        }
+    }
+
+    private func eventsStartingAtHour(_ hour: Int) -> [CalendarEvent] {
+        events.filter { event in
+            guard !event.isAllDay else { return false }
+            let eventHour = Calendar.current.component(.hour, from: event.startDate)
+            return eventHour == hour
+        }
+    }
+
+    private func activitiesStartingAtHour(_ hour: Int) -> [SmartPlannerEngine.PlannedActivity] {
+        plan.activities.filter { activity in
+            let activityHour = Calendar.current.component(.hour, from: activity.startTime)
+            return activityHour == hour
+        }
+    }
+
+    private func inlineEventBlock(for event: CalendarEvent) -> some View {
+        let startMinute = Calendar.current.component(.minute, from: event.startDate)
+        let duration = event.endDate.timeIntervalSince(event.startDate) / 60
+        let height = max(24, min(CGFloat(duration) / 60.0 * hourHeight, hourHeight * 2))
+        let topOffset = CGFloat(startMinute) / 60.0 * hourHeight
+
+        let isWalkable = plan.walkableMeetings.first { $0.calendarEventID == event.id }?.isRecommended ?? false
+
+        return HStack(spacing: 4) {
+            if isWalkable {
+                Image(systemName: "figure.walk")
+                    .font(.caption2)
+                    .foregroundColor(.white)
+            }
+            Text(event.title)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .foregroundColor(.white)
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: height)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isWalkable ? Color.blue : Color.gray.opacity(0.7))
+        )
+        .padding(.leading, timeColumnWidth + 8)
+        .padding(.trailing, 4)
+        .offset(y: topOffset)
+    }
+
+    private func inlineActivityBlock(for activity: SmartPlannerEngine.PlannedActivity) -> some View {
+        let startMinute = Calendar.current.component(.minute, from: activity.startTime)
+        let height = max(24, min(CGFloat(activity.duration) / 60.0 * hourHeight, hourHeight * 2))
+        let topOffset = CGFloat(startMinute) / 60.0 * hourHeight
+
+        return HStack(spacing: 4) {
+            Image(systemName: "figure.walk.motion")
+                .font(.caption2)
+                .foregroundColor(.white)
+            Text("Walk")
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+            Spacer()
+            Text("~\(activity.estimatedSteps)")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.8))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: height)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(LinearGradient(colors: [.green, .mint], startPoint: .leading, endPoint: .trailing))
+        )
+        .padding(.leading, timeColumnWidth + 8)
+        .padding(.trailing, 4)
+        .offset(y: topOffset)
+    }
+
+    private var currentTimeIndicator: some View {
+        let yOffset = CGFloat(currentHour - startHour) * hourHeight + CGFloat(currentMinute) / 60.0 * hourHeight
+
+        return HStack(spacing: 4) {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 8, height: 8)
+
+            Rectangle()
+                .fill(Color.red)
+                .frame(height: 2)
+        }
+        .padding(.leading, timeColumnWidth + 4)
+        .offset(y: yOffset - 4)
+    }
+
+    private func formatHour(_ hour: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h a"
+        let date = Calendar.current.date(from: DateComponents(hour: hour)) ?? Date()
+        return formatter.string(from: date)
+    }
+
+    private func formatCurrentTime() -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: Date())
+    }
+
+    private func activityTitle(for activity: SmartPlannerEngine.PlannedActivity) -> String {
+        switch activity.type {
+        case .microWalk: return "Quick Walk"
+        case .morningWalk: return "Morning"
+        case .lunchWalk: return "Lunch Walk"
+        case .eveningWalk: return "Evening"
+        case .scheduledWalk: return "Walk"
+        case .postMeetingWalk: return "Post-Meeting"
+        case .gymWorkout: return "Gym"
+        }
     }
 }
 
@@ -591,6 +1052,173 @@ struct SmartWalkableMeetingRow: View {
         .padding(12)
         .background(Color.blue.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: - Why This Plan Card
+
+struct WhyThisPlanCard: View {
+    let plan: SmartPlannerEngine.DailyMovementPlan
+    let patterns: SmartPlannerEngine.UserActivityPatterns?
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header with expand/collapse
+            Button {
+                withAnimation(.spring(response: 0.3)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "brain.head.profile")
+                        .foregroundColor(.purple)
+                    Text("Why This Plan?")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Overall strategy
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Strategy")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.purple)
+
+                        Text(planStrategy)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Divider()
+
+                    // Individual walk explanations
+                    if !plan.activities.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Scheduled Walks")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.green)
+
+                            ForEach(plan.activities) { activity in
+                                WhyActivityRow(activity: activity)
+                            }
+                        }
+                    }
+
+                    // Walkable meetings explanation
+                    let recommendedMeetings = plan.walkableMeetings.filter { $0.isRecommended }
+                    if !recommendedMeetings.isEmpty {
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Walking Meetings")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+
+                            Text("We identified \(recommendedMeetings.count) meeting\(recommendedMeetings.count == 1 ? "" : "s") that could be walking calls. These are typically 1:1s or small sync meetings where you don't need to present or take notes.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    // Pattern-based explanation
+                    if let patterns = patterns {
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Based on Your Patterns")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.orange)
+
+                            if patterns.goalAchievementRate > 0.5 {
+                                Text("You hit your goal \(Int(patterns.goalAchievementRate * 100))% of the time. This plan is calibrated to your proven success patterns.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("Your current goal hit rate is \(Int(patterns.goalAchievementRate * 100))%. This plan focuses on achievable walks to help build momentum.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            } else {
+                // Collapsed summary
+                Text(plan.reasoning)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
+    }
+
+    private var planStrategy: String {
+        let walkCount = plan.activities.count
+        let meetingCount = plan.walkableMeetings.filter { $0.isRecommended }.count
+        let totalPlannedSteps = plan.totalPlannedSteps
+
+        if plan.stepsNeeded == 0 {
+            return "You've already hit your goal! Any additional walks are bonus activity."
+        }
+
+        var strategy = ""
+
+        if walkCount == 0 && meetingCount > 0 {
+            strategy = "Your calendar is packed, so we're relying on \(meetingCount) walking meeting\(meetingCount == 1 ? "" : "s") to help you reach your goal."
+        } else if walkCount > 0 && meetingCount > 0 {
+            strategy = "We've combined \(walkCount) dedicated walk\(walkCount == 1 ? "" : "s") with \(meetingCount) walking meeting opportunity\(meetingCount == 1 ? "" : "ies") to cover your \(plan.stepsNeeded.formatted()) remaining steps."
+        } else if walkCount > 0 {
+            strategy = "We found \(walkCount) open slot\(walkCount == 1 ? "" : "s") in your calendar for walks that can cover \(totalPlannedSteps.formatted()) steps."
+        } else {
+            strategy = "Your calendar is very busy today. Consider rescheduling a meeting or taking walking calls."
+        }
+
+        return strategy
+    }
+}
+
+struct WhyActivityRow: View {
+    let activity: SmartPlannerEngine.PlannedActivity
+
+    private var timeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 6, height: 6)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(timeFormatter.string(from: activity.startTime)) - \(activity.duration) min walk")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Text(activity.reason)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 }
 

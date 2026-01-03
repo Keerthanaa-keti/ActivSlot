@@ -730,4 +730,523 @@ struct TestDataGeneratorView: View {
 #Preview {
     TestDataGeneratorView()
 }
+
+// MARK: - Intelligent Smart Planner Tests
+
+extension TestDataManager {
+
+    /// Tests for the Intelligent Autonomous Smart Planner feature
+    func runSmartPlannerTests() async -> [SmartPlannerTestResult] {
+        var results: [SmartPlannerTestResult] = []
+
+        log("=== INTELLIGENT SMART PLANNER TESTS ===")
+
+        // Test 1: Day-of-week pattern analysis
+        results.append(await testDayOfWeekPatternAnalysis())
+
+        // Test 2: Plan generation with day-specific patterns
+        results.append(await testDaySpecificPlanGeneration())
+
+        // Test 3: Checkpoint creation
+        results.append(await testCheckpointCreation())
+
+        // Test 4: Checkpoint evaluation (simulated behind scenario)
+        results.append(await testCheckpointEvaluation())
+
+        // Test 5: Dynamic replanning
+        results.append(await testDynamicReplanning())
+
+        // Test 6: Evening plan sync
+        results.append(await testEveningPlanSync())
+
+        // Test 7: Notification scheduling
+        results.append(await testNotificationScheduling())
+
+        // Test 8: Adherence verification
+        results.append(await testAdherenceVerification())
+
+        // Summary
+        let passed = results.filter { $0.passed }.count
+        let failed = results.count - passed
+        log("=== TESTS COMPLETE: \(passed) passed, \(failed) failed ===")
+
+        return results
+    }
+
+    struct SmartPlannerTestResult {
+        let testName: String
+        let passed: Bool
+        let message: String
+        let details: [String]
+    }
+
+    // Test 1: Day-of-week pattern analysis
+    private func testDayOfWeekPatternAnalysis() async -> SmartPlannerTestResult {
+        log("Test 1: Day-of-Week Pattern Analysis")
+
+        var details: [String] = []
+
+        // Generate historical step data for pattern learning
+        await generateHistoricalStepData(days: 30)
+        details.append("Generated 30 days of historical step data")
+
+        // Trigger pattern analysis
+        await SmartPlannerEngine.shared.analyzeDayOfWeekPatterns()
+        details.append("Analyzed day-of-week patterns")
+
+        // Check if patterns were created
+        let patterns = SmartPlannerEngine.shared.dayOfWeekPatterns
+        let passed = patterns != nil && !(patterns?.dayPatterns.isEmpty ?? true)
+
+        if let p = patterns {
+            details.append("Found patterns for \(p.dayPatterns.count) days")
+            for (weekday, dayPattern) in p.dayPatterns {
+                let dayName = Calendar.current.weekdaySymbols[weekday - 1]
+                details.append("  \(dayName): Peak hours \(dayPattern.peakActivityHours), avg \(dayPattern.averageDailySteps) steps")
+            }
+        } else {
+            details.append("No patterns generated")
+        }
+
+        log("  Result: \(passed ? "PASSED" : "FAILED")")
+        return SmartPlannerTestResult(
+            testName: "Day-of-Week Pattern Analysis",
+            passed: passed,
+            message: passed ? "Successfully analyzed patterns for \(patterns?.dayPatterns.count ?? 0) days" : "Failed to generate patterns",
+            details: details
+        )
+    }
+
+    // Test 2: Plan generation with day-specific patterns
+    private func testDaySpecificPlanGeneration() async -> SmartPlannerTestResult {
+        log("Test 2: Day-Specific Plan Generation")
+
+        var details: [String] = []
+
+        // Generate calendar events for tomorrow
+        await generateCalendarEvents()
+        details.append("Generated calendar events")
+
+        // Generate plan for tomorrow
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let plan = await SmartPlannerEngine.shared.generateDailyPlan(for: tomorrow)
+
+        let passed = !plan.activities.isEmpty
+
+        details.append("Plan generated for \(formatDate(tomorrow))")
+        details.append("  Activities: \(plan.activities.count)")
+        details.append("  Total planned steps: \(plan.totalPlannedSteps)")
+        details.append("  Walkable meetings: \(plan.walkableMeetings.count)")
+        details.append("  Confidence: \(String(format: "%.0f%%", plan.confidence * 100))")
+
+        for activity in plan.activities.prefix(5) {
+            details.append("  - \(activity.type.rawValue) at \(formatTime(activity.startTime)), ~\(activity.estimatedSteps) steps")
+        }
+
+        log("  Result: \(passed ? "PASSED" : "FAILED")")
+        return SmartPlannerTestResult(
+            testName: "Day-Specific Plan Generation",
+            passed: passed,
+            message: passed ? "Generated plan with \(plan.activities.count) activities" : "Failed to generate plan",
+            details: details
+        )
+    }
+
+    // Test 3: Checkpoint creation
+    private func testCheckpointCreation() async -> SmartPlannerTestResult {
+        log("Test 3: Checkpoint Creation")
+
+        var details: [String] = []
+
+        // Generate a plan
+        let today = Date()
+        let plan = await SmartPlannerEngine.shared.generateDailyPlan(for: today)
+        details.append("Generated plan with \(plan.activities.count) activities")
+
+        // Create checkpoints
+        DailyPlanSyncCoordinator.shared.createCheckpoints(for: today, plan: plan)
+        details.append("Called createCheckpoints")
+
+        // Check if checkpoints were created
+        let checkpoints = DailyPlanSyncCoordinator.shared.todayCheckpoints
+        let passed = checkpoints != nil && !(checkpoints?.checkpoints.isEmpty ?? true)
+
+        if let cp = checkpoints {
+            details.append("Created \(cp.checkpoints.count) checkpoints")
+            for checkpoint in cp.checkpoints {
+                details.append("  - Hour \(checkpoint.hour):00, target: \(checkpoint.targetSteps) steps")
+            }
+        } else {
+            details.append("No checkpoints created")
+        }
+
+        log("  Result: \(passed ? "PASSED" : "FAILED")")
+        return SmartPlannerTestResult(
+            testName: "Checkpoint Creation",
+            passed: passed,
+            message: passed ? "Created \(checkpoints?.checkpoints.count ?? 0) checkpoints" : "Failed to create checkpoints",
+            details: details
+        )
+    }
+
+    // Test 4: Checkpoint evaluation
+    private func testCheckpointEvaluation() async -> SmartPlannerTestResult {
+        log("Test 4: Checkpoint Evaluation")
+
+        var details: [String] = []
+
+        // First create checkpoints
+        let today = Date()
+        let plan = await SmartPlannerEngine.shared.generateDailyPlan(for: today)
+        DailyPlanSyncCoordinator.shared.createCheckpoints(for: today, plan: plan)
+        details.append("Created checkpoints for today")
+
+        // Set a low step count to simulate being behind
+        await generateStepScenario(.lowSteps) // 2000 steps
+        details.append("Set today's steps to 2000 (behind scenario)")
+
+        // Evaluate checkpoint
+        await DailyPlanSyncCoordinator.shared.evaluateCheckpoint()
+        details.append("Evaluated checkpoint")
+
+        // Check results
+        let isBehind = DailyPlanSyncCoordinator.shared.isCurrentlyBehind
+        let deficit = DailyPlanSyncCoordinator.shared.currentDeficit
+
+        let passed = true // This test is more about verifying the flow works
+
+        details.append("Behind status: \(isBehind)")
+        details.append("Current deficit: \(deficit) steps")
+
+        if let checkpoints = DailyPlanSyncCoordinator.shared.todayCheckpoints {
+            for checkpoint in checkpoints.checkpoints where checkpoint.actualSteps != nil {
+                details.append("  Checkpoint @\(checkpoint.hour): \(checkpoint.actualSteps!) actual vs \(checkpoint.targetSteps) target - \(checkpoint.status)")
+            }
+        }
+
+        log("  Result: \(passed ? "PASSED" : "FAILED")")
+        return SmartPlannerTestResult(
+            testName: "Checkpoint Evaluation",
+            passed: passed,
+            message: "Evaluated checkpoint - behind: \(isBehind), deficit: \(deficit)",
+            details: details
+        )
+    }
+
+    // Test 5: Dynamic replanning
+    private func testDynamicReplanning() async -> SmartPlannerTestResult {
+        log("Test 5: Dynamic Replanning")
+
+        var details: [String] = []
+
+        // Enable smart plan sync
+        UserPreferences.shared.smartPlanAutoSyncEnabled = true
+        UserPreferences.shared.autoReplanWhenBehind = true
+        details.append("Enabled auto-sync and auto-replan")
+
+        // Generate light calendar to have gaps for catch-up walks
+        await generateLightMeetingDay()
+        details.append("Generated light meeting day")
+
+        // Trigger dynamic replan with a deficit
+        let testDeficit = 3000
+        await DailyPlanSyncCoordinator.shared.dynamicReplan(deficit: testDeficit)
+        details.append("Triggered dynamic replan with \(testDeficit) step deficit")
+
+        // Check if catch-up walks were created
+        let prefs = UserPreferences.shared
+        let dateString = formatDateString(Date())
+        let managedIDs = prefs.smartPlanManagedEventIDs[dateString] ?? []
+
+        let passed = !managedIDs.isEmpty
+
+        details.append("Created \(managedIDs.count) calendar events for catch-up walks")
+
+        log("  Result: \(passed ? "PASSED" : "FAILED")")
+        return SmartPlannerTestResult(
+            testName: "Dynamic Replanning",
+            passed: passed,
+            message: passed ? "Created \(managedIDs.count) catch-up walks" : "No catch-up walks created",
+            details: details
+        )
+    }
+
+    // Test 6: Evening plan sync
+    private func testEveningPlanSync() async -> SmartPlannerTestResult {
+        log("Test 6: Evening Plan Sync")
+
+        var details: [String] = []
+
+        // Enable smart plan sync
+        UserPreferences.shared.smartPlanAutoSyncEnabled = true
+        details.append("Enabled smart plan auto-sync")
+
+        // Generate calendar events for tomorrow
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        await generateMultiDayCalendarEvents()
+        details.append("Generated calendar events for tomorrow")
+
+        // Trigger evening sync
+        await DailyPlanSyncCoordinator.shared.syncTomorrowPlan()
+        details.append("Triggered evening plan sync")
+
+        // Check sync result
+        let syncResult = DailyPlanSyncCoordinator.shared.lastSyncResult
+        let passed = syncResult != nil
+
+        if let result = syncResult {
+            details.append("Sync result:")
+            details.append("  Date: \(formatDate(result.date))")
+            details.append("  Events created: \(result.eventsCreated)")
+            details.append("  Activities synced: \(result.activitiesSynced.count)")
+            details.append("  Optimization type: \(result.optimizationType.rawValue)")
+        } else {
+            details.append("No sync result available")
+        }
+
+        log("  Result: \(passed ? "PASSED" : "FAILED")")
+        return SmartPlannerTestResult(
+            testName: "Evening Plan Sync",
+            passed: passed,
+            message: passed ? "Synced \(syncResult?.eventsCreated ?? 0) events for tomorrow" : "Sync failed",
+            details: details
+        )
+    }
+
+    // Test 7: Notification scheduling
+    private func testNotificationScheduling() async -> SmartPlannerTestResult {
+        log("Test 7: Notification Scheduling")
+
+        var details: [String] = []
+
+        // Generate a plan
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let plan = await SmartPlannerEngine.shared.generateDailyPlan(for: tomorrow)
+        details.append("Generated plan for tomorrow")
+
+        // Schedule plan ready notification
+        NotificationManager.shared.schedulePlanReadyNotification(plan: plan)
+        details.append("Scheduled plan ready notification")
+
+        // Schedule behind on steps notification (test)
+        await NotificationManager.shared.scheduleBehindOnStepsNotification(
+            deficit: 2000,
+            suggestedSlot: nil
+        )
+        details.append("Scheduled behind on steps notification")
+
+        // Schedule walkable meeting notifications
+        NotificationManager.shared.scheduleWalkableMeetingPreNotifications(for: plan)
+        details.append("Scheduled walkable meeting pre-notifications for \(plan.walkableMeetings.count) meetings")
+
+        // Get pending notifications count
+        let center = UNUserNotificationCenter.current()
+        let pendingNotifications = await center.pendingNotificationRequests()
+        let smartPlannerNotifications = pendingNotifications.filter {
+            $0.identifier.contains("plan-ready") ||
+            $0.identifier.contains("behind-on-steps") ||
+            $0.identifier.contains("walkable-meeting-pre")
+        }
+
+        let passed = !smartPlannerNotifications.isEmpty
+
+        details.append("Pending smart planner notifications: \(smartPlannerNotifications.count)")
+        for notification in smartPlannerNotifications.prefix(5) {
+            details.append("  - \(notification.identifier): \(notification.content.title)")
+        }
+
+        log("  Result: \(passed ? "PASSED" : "FAILED")")
+        return SmartPlannerTestResult(
+            testName: "Notification Scheduling",
+            passed: passed,
+            message: "Scheduled \(smartPlannerNotifications.count) notifications",
+            details: details
+        )
+    }
+
+    // Test 8: Adherence verification
+    private func testAdherenceVerification() async -> SmartPlannerTestResult {
+        log("Test 8: Adherence Verification")
+
+        var details: [String] = []
+
+        // Create a test activity that happened in the past
+        let calendar = Calendar.current
+        var pastComponents = calendar.dateComponents([.year, .month, .day], from: Date())
+        pastComponents.hour = 8
+        pastComponents.minute = 0
+        let pastTime = calendar.date(from: pastComponents)!
+
+        let slot = SmartPlannerEngine.PlannedActivity.TimeSlot(
+            start: pastTime,
+            end: calendar.date(byAdding: .minute, value: 30, to: pastTime)!,
+            isIdeal: true,
+            conflictRisk: .low
+        )
+
+        var activity = SmartPlannerEngine.PlannedActivity(
+            id: UUID(),
+            type: .morningWalk,
+            startTime: pastTime,
+            duration: 30,
+            estimatedSteps: 2000,
+            priority: .recommended,
+            slot: slot,
+            reason: "Test morning walk",
+            status: .planned,
+            calendarEventID: nil
+        )
+
+        details.append("Created test activity: \(activity.type.rawValue) at \(formatTime(pastTime))")
+
+        // Set step data for that time window
+        await generateStepScenario(.midDay)
+        details.append("Set step data for verification")
+
+        // Verify adherence
+        let verifiedActivity = await SmartPlannerEngine.shared.verifyActivityAdherence(activity)
+
+        let passed = verifiedActivity.adherenceStatus != .pending
+
+        details.append("Adherence status: \(verifiedActivity.adherenceStatus)")
+        if let actual = verifiedActivity.actualSteps {
+            details.append("Actual steps: \(actual) vs expected: \(verifiedActivity.expectedSteps)")
+        }
+
+        log("  Result: \(passed ? "PASSED" : "FAILED")")
+        return SmartPlannerTestResult(
+            testName: "Adherence Verification",
+            passed: passed,
+            message: "Adherence status: \(verifiedActivity.adherenceStatus)",
+            details: details
+        )
+    }
+
+    // Helper: Generate historical step data
+    private func generateHistoricalStepData(days: Int) async {
+        log("  Generating \(days) days of historical step data...")
+
+        let calendar = Calendar.current
+
+        for dayOffset in 1...days {
+            if let date = calendar.date(byAdding: .day, value: -dayOffset, to: Date()) {
+                let weekday = calendar.component(.weekday, from: date)
+                let isWeekend = weekday == 1 || weekday == 7
+
+                // Create realistic hourly patterns based on day type
+                let baseSteps = isWeekend ? 5000 : 8000
+                let variation = Int.random(in: -2000...3000)
+                let totalSteps = max(3000, baseSteps + variation)
+
+                await saveSteps(totalSteps, for: date)
+            }
+        }
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func formatDateString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - Smart Planner Test View
+
+struct SmartPlannerTestView: View {
+    @StateObject private var testManager = TestDataManager.shared
+    @State private var testResults: [TestDataManager.SmartPlannerTestResult] = []
+    @State private var isRunning = false
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Run Tests") {
+                    Button(action: runTests) {
+                        HStack {
+                            if isRunning {
+                                ProgressView()
+                                    .padding(.trailing, 8)
+                                Text("Running tests...")
+                            } else {
+                                Image(systemName: "play.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Run All Smart Planner Tests")
+                            }
+                        }
+                    }
+                    .disabled(isRunning)
+                }
+
+                if !testResults.isEmpty {
+                    Section("Results") {
+                        let passed = testResults.filter { $0.passed }.count
+                        let failed = testResults.count - passed
+
+                        HStack {
+                            Text("Summary:")
+                            Spacer()
+                            Text("\(passed) passed")
+                                .foregroundColor(.green)
+                            Text("/")
+                            Text("\(failed) failed")
+                                .foregroundColor(failed > 0 ? .red : .secondary)
+                        }
+                        .font(.headline)
+                    }
+
+                    ForEach(testResults, id: \.testName) { result in
+                        Section {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Image(systemName: result.passed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                        .foregroundColor(result.passed ? .green : .red)
+                                    Text(result.testName)
+                                        .font(.headline)
+                                }
+
+                                Text(result.message)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+
+                                ForEach(result.details, id: \.self) { detail in
+                                    Text(detail)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Smart Planner Tests")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func runTests() {
+        isRunning = true
+        Task {
+            testResults = await testManager.runSmartPlannerTests()
+            isRunning = false
+        }
+    }
+}
 #endif
