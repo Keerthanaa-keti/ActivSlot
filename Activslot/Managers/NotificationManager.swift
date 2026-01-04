@@ -517,10 +517,23 @@ class NotificationManager: ObservableObject {
         // Remove all existing walkable meeting notifications
         cancelNotificationsWithPrefix(NotificationIdentifier.walkableMeetingPrefix)
 
-        // Schedule new notifications for walkable meetings
+        // ATOMIC HABITS: Only ONE notification for the BEST walkable meeting
+        // Don't overwhelm users with multiple reminders
+        // Find the single best walkable meeting (shortest with fewest attendees = most walkable)
         let walkableEvents = events.filter { $0.isWalkable && $0.startDate > Date() }
-        for event in walkableEvents {
-            scheduleWalkableMeetingReminder(for: event)
+        let bestWalkableMeeting = walkableEvents
+            .sorted { event1, event2 in
+                // Prefer 1:1s (fewer attendees), then shorter meetings
+                if event1.attendeeCount != event2.attendeeCount {
+                    return event1.attendeeCount < event2.attendeeCount
+                }
+                return event1.duration < event2.duration
+            }
+            .first
+
+        // Schedule notification only for the best one
+        if let best = bestWalkableMeeting {
+            scheduleWalkableMeetingReminder(for: best)
         }
     }
 

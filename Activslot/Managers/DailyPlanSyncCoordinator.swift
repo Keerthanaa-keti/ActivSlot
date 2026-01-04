@@ -633,21 +633,15 @@ class DailyPlanSyncCoordinator: ObservableObject {
     }
 
     /// Handle when user is behind on steps
+    /// ATOMIC HABITS: We don't nag users with multiple "behind" notifications
+    /// The streak-at-risk notification in the evening is sufficient
+    /// This just marks the checkpoint and optionally replans, but NO notification spam
     private func handleBehindSchedule(deficit: Int, checkpointIndex: Int) async {
         let prefs = UserPreferences.shared
         guard prefs.smartPlanAutoSyncEnabled else { return }
 
-        // Find the next available slot for a catch-up walk
-        let suggestedSlot = await findNextAvailableSlot(minimumMinutes: 15)
-
-        // Send notification about being behind
-        let notificationManager = NotificationManager.shared
-        await notificationManager.scheduleBehindOnStepsNotification(
-            deficit: deficit,
-            suggestedSlot: suggestedSlot
-        )
-
-        // Mark notification as sent
+        // Mark notification as sent (even though we're not sending one)
+        // This prevents repeated processing
         if var checkpoints = todayCheckpoints {
             checkpoints.checkpoints[checkpointIndex].notificationSent = true
             await MainActor.run {
@@ -660,13 +654,15 @@ class DailyPlanSyncCoordinator: ObservableObject {
             }
         }
 
-        // If auto-replan is enabled, create a catch-up plan
+        // ATOMIC HABITS: Instead of nagging with notifications, just silently replan
+        // The evening streak-at-risk notification is enough
+        // If auto-replan is enabled, adjust the plan to help user catch up
         if prefs.autoReplanWhenBehind {
             await dynamicReplan(deficit: deficit)
         }
 
         #if DEBUG
-        print("DailyPlanSyncCoordinator: Behind schedule by \(deficit) steps, notification sent")
+        print("DailyPlanSyncCoordinator: Behind by \(deficit) steps - adjusted plan (no notification, Atomic Habits principle)")
         #endif
     }
 

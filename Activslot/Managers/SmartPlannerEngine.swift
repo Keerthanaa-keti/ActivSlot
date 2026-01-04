@@ -413,8 +413,10 @@ class SmartPlannerEngine: ObservableObject {
 
     // MARK: - Walkable Meeting Analysis
 
+    /// Analyzes meetings and returns ONLY THE BEST walkable meeting opportunity
+    /// Atomic Habits principle: Don't overwhelm with choices, give ONE clear action
     private func analyzeWalkableMeetings(events: [CalendarEvent]) -> [WalkableMeeting] {
-        events.compactMap { event -> WalkableMeeting? in
+        let allMeetings = events.compactMap { event -> WalkableMeeting? in
             guard event.isRealMeeting else { return nil }
 
             let duration = Int(event.endDate.timeIntervalSince(event.startDate) / 60)
@@ -471,6 +473,20 @@ class SmartPlannerEngine: ObservableObject {
                 reason: reason
             )
         }
+
+        // ATOMIC HABITS: Return only THE SINGLE BEST walkable meeting
+        // Don't overwhelm users with 5 meetings to think about
+        // Give them ONE clear opportunity they can act on
+        let bestMeeting = allMeetings
+            .filter { $0.isRecommended }
+            .sorted { $0.walkabilityScore > $1.walkabilityScore }
+            .first
+
+        // Return just the best one (or empty if none are truly walkable)
+        if let best = bestMeeting {
+            return [best]
+        }
+        return []
     }
 
     // MARK: - Available Slot Analysis
@@ -704,9 +720,10 @@ class SmartPlannerEngine: ObservableObject {
             }
             .sorted { $0.score > $1.score }
 
-        // Fill in activities - limit to 3 walks max to avoid overwhelming the user
-        // Quality over quantity: fewer, better-timed walks are more likely to be completed
-        let maxActivities = 3
+        // ATOMIC HABITS PRINCIPLE: "1% better" means ONE action, not a complex plan
+        // Show only the SINGLE BEST walk opportunity - reduce cognitive load
+        // Users complete 1 thing; they rarely complete 3
+        let maxActivities = 1
         let stepsPerMinute = patterns.stepsPerMinuteWalking > 0 ? patterns.stepsPerMinuteWalking : 100
 
         for (slot, score) in scoredSlots {
