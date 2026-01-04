@@ -585,6 +585,25 @@ class SmartPlannerEngine: ObservableObject {
         }
     }
 
+    /// Check if a time slot strongly conflicts with user's preference
+    /// Used to heavily penalize or exclude slots outside preference window
+    private func conflictsWithPreference(_ date: Date, prefs: UserPreferences) -> Bool {
+        let hour = Calendar.current.component(.hour, from: date)
+
+        switch prefs.preferredWalkTime {
+        case .morning: return hour >= 17 // Morning preference = don't want evening
+        case .evening: return hour < 14  // Evening preference = don't want morning
+        case .afternoon: return hour < 9 || hour >= 20 // Afternoon = avoid early morning and late evening
+        case .noPreference: return false
+        }
+    }
+
+    /// Check if it's a weekend day (for adjusting wake time buffer)
+    private func isWeekend(_ date: Date) -> Bool {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return weekday == 1 || weekday == 7 // Sunday = 1, Saturday = 7
+    }
+
     // MARK: - Optimal Plan Creation
 
     private func createOptimalPlan(
@@ -636,43 +655,67 @@ class SmartPlannerEngine: ObservableObject {
         print("SmartPlannerEngine: Using \(slotsToUse.count) slots (\(nonMealSlots.isEmpty ? "including meal slots as fallback" : "non-meal only"))")
         #endif
 
-        // Strategy: Prioritize slots based on user patterns and preferences
+        // Strategy: Prioritize slots based on user EXPLICIT preferences first,
+        // then day-specific patterns, then general patterns
+        // Key insight: User's stated preference (e.g., "evening") should be DECISIVE
+        let targetDate = availableSlots.first?.start ?? Date()
+        let isWeekendDay = isWeekend(targetDate)
+
         let scoredSlots = slotsToUse
             .map { slot -> (slot: AvailableSlot, score: Double) in
                 var score = 0.0
                 let hour = Calendar.current.component(.hour, from: slot.start)
 
-                // Prefer slots that match day-specific activity hours (highest priority)
-                if effectivePeakHours.contains(hour) { score += 0.4 }
+                // CRITICAL: User's explicit preference is DECISIVE
+                // If user says "evening", morning slots get HEAVILY penalized
+                if conflictsWithPreference(slot.start, prefs: prefs) {
+                    score -= 1.0  // Major penalty - push to bottom of list
+                }
+
+                // Strong bonus for matching user's preferred time
+                if slot.isPreferredTime { score += 0.6 }  // Increased from 0.2
+
+                // Day-specific patterns (when user actually walks on this day of week)
+                if effectivePeakHours.contains(hour) { score += 0.25 }
 
                 // Consider day-specific hour success rates if available
                 if let successRates = daySpecificSuccessRates,
                    let hourSuccessRate = successRates[hour] {
-                    score += hourSuccessRate * 0.35  // Strong weight for proven success
+                    score += hourSuccessRate * 0.2
                 }
 
-                // Prefer user's preferred time
-                if slot.isPreferredTime { score += 0.2 }
+                // Weekend adjustment: Extra buffer after wake time
+                // On weekends, penalize early morning more heavily
+                if isWeekendDay && hour < (prefs.wakeTime.hour + 2) {
+                    score -= 0.5  // Don't suggest walks too soon after weekend wake time
+                }
 
                 // Prefer longer slots for main activities
-                if slot.duration >= 20 { score += 0.15 }
-                if slot.duration >= 30 { score += 0.1 }
+                if slot.duration >= 20 { score += 0.1 }
+                if slot.duration >= 30 { score += 0.05 }
 
-                // Consider general adherence data (lower priority than day-specific)
+                // Consider general adherence data (lowest priority)
                 let timeOfDay = categorizeTimeOfDay(hour)
                 if let completionRate = adherence.bestTimeSlots[timeOfDay] {
-                    score += completionRate * 0.15
+                    score += completionRate * 0.1
                 }
 
                 return (slot, score)
             }
             .sorted { $0.score > $1.score }
 
-        // Fill in activities
+        // Fill in activities - limit to 3 walks max to avoid overwhelming the user
+        // Quality over quantity: fewer, better-timed walks are more likely to be completed
+        let maxActivities = 3
         let stepsPerMinute = patterns.stepsPerMinuteWalking > 0 ? patterns.stepsPerMinuteWalking : 100
 
-        for (slot, _) in scoredSlots {
+        for (slot, score) in scoredSlots {
             guard remainingSteps > 0 else { break }
+            guard activities.count < maxActivities else { break }
+
+            // Skip slots with very negative scores (strongly conflict with preferences)
+            // unless we have no activities yet and really need one
+            if score < -0.5 && activities.count > 0 { continue }
 
             // Calculate ideal duration for this slot
             let minutesNeeded = (remainingSteps / stepsPerMinute) + 5 // Add buffer
@@ -1143,6 +1186,113 @@ class SmartPlannerEngine: ObservableObject {
     /// Get the pattern for a specific date (uses day of week)
     func getPatternForDate(_ date: Date) -> DayOfWeekPatterns.DayPattern? {
         return dayOfWeekPatterns?.pattern(for: date)
+    }
+
+    // MARK: - Pattern Visualization Data
+
+    /// Data structure for UI to display walk pattern graph
+    struct HourlyPatternData: Identifiable {
+        let id = UUID()
+        let hour: Int
+        let averageSteps: Int
+        let isRecommended: Bool  // Based on user preference + patterns
+        let label: String  // "8 AM", "12 PM", etc.
+    }
+
+    /// Get hourly walk pattern data for a specific day of week (for visualization)
+    /// Returns array of 24 hours with average steps and recommendation status
+    func getHourlyPatternData(for date: Date) -> [HourlyPatternData] {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        let prefs = UserPreferences.shared
+
+        // Get day-specific pattern if available
+        let dayPattern = dayOfWeekPatterns?.dayPatterns[weekday]
+
+        // Build 24-hour data
+        var result: [HourlyPatternData] = []
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h a"  // "8 AM", "12 PM", etc.
+
+        for hour in 0..<24 {
+            // Skip hours outside active window
+            let wakeHour = prefs.wakeTime.hour
+            let sleepHour = prefs.sleepTime.hour
+
+            // Skip very early or late hours
+            guard hour >= max(wakeHour - 1, 5) && hour <= min(sleepHour + 1, 23) else { continue }
+
+            let avgSteps = dayPattern?.hourlyStepAverages[hour] ?? 0
+
+            // Determine if this hour is recommended based on preference + patterns
+            var isRecommended = false
+
+            // Check if matches user's preferred time
+            var components = calendar.dateComponents([.year, .month, .day], from: date)
+            components.hour = hour
+            if let hourDate = calendar.date(from: components) {
+                isRecommended = isPreferredTime(hourDate, prefs: prefs)
+
+                // Boost if it's also a peak activity hour
+                if let peakHours = dayPattern?.peakActivityHours, peakHours.contains(hour) {
+                    isRecommended = isRecommended || avgSteps > 500
+                }
+
+                // Don't recommend if it conflicts with preference
+                if conflictsWithPreference(hourDate, prefs: prefs) {
+                    isRecommended = false
+                }
+            }
+
+            // Create label
+            var labelComponents = calendar.dateComponents([.year, .month, .day], from: date)
+            labelComponents.hour = hour
+            labelComponents.minute = 0
+            let labelDate = calendar.date(from: labelComponents) ?? date
+            let label = formatter.string(from: labelDate)
+
+            result.append(HourlyPatternData(
+                hour: hour,
+                averageSteps: avgSteps,
+                isRecommended: isRecommended,
+                label: label
+            ))
+        }
+
+        return result
+    }
+
+    /// Get summary text explaining why we're recommending these times
+    func getPatternExplanation(for date: Date) -> String {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        let dayName = calendar.weekdaySymbols[weekday - 1]
+        let prefs = UserPreferences.shared
+
+        let preferenceText: String
+        switch prefs.preferredWalkTime {
+        case .morning: preferenceText = "mornings"
+        case .afternoon: preferenceText = "afternoons"
+        case .evening: preferenceText = "evenings"
+        case .noPreference: preferenceText = "throughout the day"
+        }
+
+        guard let dayPattern = dayOfWeekPatterns?.dayPatterns[weekday],
+              dayPattern.totalDaysSampled > 0 else {
+            return "Based on your preference for \(preferenceText). We'll learn your \(dayName) patterns over time."
+        }
+
+        let peakHours = dayPattern.peakActivityHours.prefix(3)
+        let peakTimes = peakHours.map { formatHour($0) }.joined(separator: ", ")
+
+        return "On \(dayName)s, you typically walk around \(peakTimes). Showing suggestions that match your \(preferenceText) preference."
+    }
+
+    private func formatHour(_ hour: Int) -> String {
+        if hour == 0 { return "12 AM" }
+        if hour < 12 { return "\(hour) AM" }
+        if hour == 12 { return "12 PM" }
+        return "\(hour - 12) PM"
     }
 
     // MARK: - Adherence Verification

@@ -26,6 +26,19 @@ struct SmartPlanView: View {
                         goalSteps: userPreferences.dailyStepGoal
                     )
 
+                    // Walk Pattern Graph - shows user's typical activity for this day of week
+                    let patternData = planner.getHourlyPatternData(for: selectedDate)
+                    let explanation = planner.getPatternExplanation(for: selectedDate)
+                    let dayName = Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: selectedDate) - 1]
+
+                    if !patternData.isEmpty {
+                        WalkPatternGraphCard(
+                            patternData: patternData,
+                            explanation: explanation,
+                            dayName: dayName
+                        )
+                    }
+
                     // Day Timeline (Visual Overview)
                     if let plan = planner.currentDayPlan, !todayEvents.isEmpty {
                         DayTimelineView(plan: plan, events: todayEvents)
@@ -1407,6 +1420,118 @@ struct SmartActivityDetailSheet: View {
         case .postMeetingWalk: return "Post-Meeting Walk"
         case .gymWorkout: return "Gym Workout"
         }
+    }
+}
+
+// MARK: - Walk Pattern Graph Card
+
+struct WalkPatternGraphCard: View {
+    let patternData: [SmartPlannerEngine.HourlyPatternData]
+    let explanation: String
+    let dayName: String
+
+    @State private var isExpanded = false
+
+    private var maxSteps: Int {
+        patternData.map(\.averageSteps).max() ?? 1000
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header with expand/collapse
+            Button {
+                withAnimation(.spring(response: 0.3)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "chart.bar.fill")
+                        .foregroundColor(.blue)
+                    Text("Your \(dayName) Pattern")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                }
+            }
+            .buttonStyle(.plain)
+
+            // Explanation text (always visible)
+            Text(explanation)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if isExpanded {
+                // Bar graph
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Typical activity by hour")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 4)
+
+                    // Scrollable horizontal bar chart
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .bottom, spacing: 4) {
+                            ForEach(patternData) { data in
+                                VStack(spacing: 2) {
+                                    // Bar
+                                    let height = maxSteps > 0
+                                        ? max(4, CGFloat(data.averageSteps) / CGFloat(maxSteps) * 60)
+                                        : 4
+
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(data.isRecommended ? Color.green : Color.gray.opacity(0.3))
+                                        .frame(width: 20, height: height)
+
+                                    // Hour label
+                                    Text(shortHourLabel(data.hour))
+                                        .font(.system(size: 8))
+                                        .foregroundColor(data.isRecommended ? .green : .secondary)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+
+                    // Legend
+                    HStack(spacing: 16) {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 8, height: 8)
+                            Text("Recommended")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 8, height: 8)
+                            Text("Outside preference")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
+    }
+
+    private func shortHourLabel(_ hour: Int) -> String {
+        if hour == 0 { return "12a" }
+        if hour < 12 { return "\(hour)a" }
+        if hour == 12 { return "12p" }
+        return "\(hour - 12)p"
     }
 }
 
