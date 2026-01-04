@@ -73,7 +73,8 @@ class CalendarManager: ObservableObject {
     @AppStorage("selectedCalendarIDs") private var selectedCalendarIDsData: Data = Data()
     // Version 4: Filter by user's email address
     @AppStorage("calendarFilterVersion") private var calendarFilterVersion: Int = 0
-    private let currentFilterVersion = 4
+    // Version 5: Include work calendars (Outlook, Google, Exchange) in default selection
+    private let currentFilterVersion = 5
 
     // User's email addresses (from calendar accounts)
     @AppStorage("userEmailAddresses") private var userEmailAddressesData: Data = Data()
@@ -219,18 +220,34 @@ class CalendarManager: ObservableObject {
             )
         }.sorted { $0.title < $1.title }
 
-        // If no calendars selected yet, select only owned calendars by default
+        // If no calendars selected yet, select owned calendars AND work calendars by default
+        // FIX: Include Outlook/Google/Exchange calendars even if not "owned"
+        // These are the user's work calendars and should show by default
         if selectedCalendarIDs.isEmpty && !availableCalendars.isEmpty {
-            let ownedCalendars = availableCalendars.filter { $0.isOwned }
-            selectedCalendarIDs = Set(ownedCalendars.map { $0.id })
+            let defaultCalendars = availableCalendars.filter { calendar in
+                // Include owned calendars
+                calendar.isOwned ||
+                // Include work calendars (Outlook, Google, Exchange) even if not marked as owned
+                calendar.sourceType == .outlook ||
+                calendar.sourceType == .google ||
+                calendar.source.lowercased().contains("exchange") ||
+                calendar.source.lowercased().contains("office")
+            }
+            selectedCalendarIDs = Set(defaultCalendars.map { $0.id })
             calendarFilterVersion = currentFilterVersion
         }
 
         // For existing users with an older filter version, re-apply the enhanced filter
-        // This ensures users get the improved owned calendar detection
+        // This ensures users get work calendars included
         if calendarFilterVersion < currentFilterVersion && !availableCalendars.isEmpty {
-            let ownedCalendars = availableCalendars.filter { $0.isOwned }
-            selectedCalendarIDs = Set(ownedCalendars.map { $0.id })
+            let defaultCalendars = availableCalendars.filter { calendar in
+                calendar.isOwned ||
+                calendar.sourceType == .outlook ||
+                calendar.sourceType == .google ||
+                calendar.source.lowercased().contains("exchange") ||
+                calendar.source.lowercased().contains("office")
+            }
+            selectedCalendarIDs = Set(defaultCalendars.map { $0.id })
             calendarFilterVersion = currentFilterVersion
         }
     }
