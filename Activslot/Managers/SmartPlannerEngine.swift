@@ -1019,7 +1019,13 @@ class SmartPlannerEngine: ObservableObject {
 
     // MARK: - Calendar Integration
 
+    // Track recently added events to prevent duplicates (debounce rapid clicks)
+    private static var recentlyAddedEventKeys: Set<String> = []
+    private static let recentlyAddedLock = NSLock()
+
     /// Add planned activity to user's calendar
+    /// - Prevents duplicate events via debouncing and existence check
+    /// - Automatically includes autopilot calendar in selected calendars for display
     func addToCalendar(_ activity: PlannedActivity) async throws -> String? {
         let prefs = UserPreferences.shared
         guard !prefs.autopilotCalendarID.isEmpty else { return nil }
@@ -1029,9 +1035,51 @@ class SmartPlannerEngine: ObservableObject {
             return nil
         }
 
+        // Create a unique key for this activity to prevent duplicate rapid clicks
+        let eventKey = "\(activity.startTime.timeIntervalSince1970)-\(activity.duration)"
+
+        // Check if we recently added this event (debounce)
+        SmartPlannerEngine.recentlyAddedLock.lock()
+        if SmartPlannerEngine.recentlyAddedEventKeys.contains(eventKey) {
+            SmartPlannerEngine.recentlyAddedLock.unlock()
+            #if DEBUG
+            print("SmartPlannerEngine: Duplicate event prevented (debounce)")
+            #endif
+            return nil
+        }
+        SmartPlannerEngine.recentlyAddedEventKeys.insert(eventKey)
+        SmartPlannerEngine.recentlyAddedLock.unlock()
+
+        // Clear old keys after 30 seconds
+        Task {
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            SmartPlannerEngine.recentlyAddedLock.lock()
+            SmartPlannerEngine.recentlyAddedEventKeys.remove(eventKey)
+            SmartPlannerEngine.recentlyAddedLock.unlock()
+        }
+
+        // Check if event already exists at this time (prevent duplicates from previous sessions)
+        let activityTitleText = activityTitle(for: activity)
+        let predicate = eventStore.predicateForEvents(
+            withStart: activity.startTime,
+            end: activity.slot.end,
+            calendars: [calendar]
+        )
+        let existingEvents = eventStore.events(matching: predicate)
+
+        if let existingEvent = existingEvents.first(where: { $0.title == activityTitleText }) {
+            #if DEBUG
+            print("SmartPlannerEngine: Event already exists at this time")
+            #endif
+            // Ensure calendar is selected for display even if event exists
+            await ensureAutopilotCalendarSelected()
+            return existingEvent.eventIdentifier
+        }
+
+        // Create new event
         let event = EKEvent(eventStore: eventStore)
         event.calendar = calendar
-        event.title = activityTitle(for: activity)
+        event.title = activityTitleText
         event.startDate = activity.startTime
         event.endDate = activity.slot.end
 
@@ -1050,7 +1098,36 @@ class SmartPlannerEngine: ObservableObject {
         event.addAlarm(alarm)
 
         try eventStore.save(event, span: .thisEvent)
+
+        // Ensure autopilot calendar is included in selected calendars so walks show in Calendar tab
+        await ensureAutopilotCalendarSelected()
+
+        #if DEBUG
+        print("SmartPlannerEngine: Event added to calendar successfully")
+        #endif
+
         return event.eventIdentifier
+    }
+
+    /// Ensure the autopilot calendar is included in selected calendars so walks show in Calendar tab
+    private func ensureAutopilotCalendarSelected() async {
+        let prefs = UserPreferences.shared
+        let calendarManager = CalendarManager.shared
+
+        guard !prefs.autopilotCalendarID.isEmpty else { return }
+
+        // Check if autopilot calendar is already selected
+        if !calendarManager.selectedCalendarIDs.contains(prefs.autopilotCalendarID) {
+            await MainActor.run {
+                calendarManager.selectedCalendarIDs.insert(prefs.autopilotCalendarID)
+                #if DEBUG
+                print("SmartPlannerEngine: Added autopilot calendar to selected calendars for display")
+                #endif
+            }
+        }
+
+        // Refresh calendar events to show the newly added walk
+        await calendarManager.refreshEvents()
     }
 
     private func activityTitle(for activity: PlannedActivity) -> String {

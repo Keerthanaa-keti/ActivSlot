@@ -1317,6 +1317,7 @@ struct SmartActivityDetailSheet: View {
     let onAddToCalendar: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var isAdding = false  // Prevent double-tap
 
     private var timeFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -1379,22 +1380,33 @@ struct SmartActivityDetailSheet: View {
 
                 Spacer()
 
-                // Add to calendar button
+                // Add to calendar button - with loading state to prevent double-tap
                 Button {
+                    guard !isAdding else { return }
+                    isAdding = true
                     onAddToCalendar()
-                    dismiss()
+                    // Brief delay before dismiss to ensure event is added
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        dismiss()
+                    }
                 } label: {
                     HStack {
-                        Image(systemName: "calendar.badge.plus")
-                        Text("Add to Calendar")
+                        if isAdding {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        } else {
+                            Image(systemName: "calendar.badge.plus")
+                        }
+                        Text(isAdding ? "Adding..." : "Add to Calendar")
                     }
                     .font(.headline)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.green)
+                    .background(isAdding ? Color.gray : Color.green)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .disabled(isAdding)
             }
             .padding()
             .navigationTitle("Activity Details")
