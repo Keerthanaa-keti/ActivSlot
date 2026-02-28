@@ -37,12 +37,14 @@ struct SmartPlanView: View {
                             explanation: explanation,
                             dayName: dayName
                         )
+                        .premiumGated(.insights)
                     }
 
                     // Day Timeline (Visual Overview)
                     if let plan = planner.currentDayPlan, !todayEvents.isEmpty {
                         DayTimelineView(plan: plan, events: todayEvents)
                             .environmentObject(userPreferences)
+                            .premiumGated(.insights)
                     }
 
                     // Today's Plan
@@ -69,9 +71,11 @@ struct SmartPlanView: View {
 
                         // Why This Plan - Explanation of AI decisions
                         WhyThisPlanCard(plan: plan, patterns: planner.userPatterns)
+                            .premiumGated(.insights)
 
                         // Plan Insights
                         PlanInsightsCard(plan: plan, patterns: planner.userPatterns)
+                            .premiumGated(.insights)
                     } else {
                         LoadingPlanView()
                     }

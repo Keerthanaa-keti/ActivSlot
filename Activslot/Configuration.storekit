@@ -1,0 +1,160 @@
+{
+  "identifier" : "F8A8E7A1-1234-4567-8901-ABCDEF123456",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : null,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "D7E4B3A1-1111-2222-3333-444455556666",
+      "localizations" : [
+
+      ],
+      "name" : "ActivSlot Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "0.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "A1B2C3D4-0001-0001-0001-000000000001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Full access to all Pro features, billed weekly",
+              "displayName" : "ActivSlot Pro Weekly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.activslot.healthapp.pro.weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "ActivSlot Pro Weekly",
+          "subscriptionGroupID" : "D7E4B3A1-1111-2222-3333-444455556666",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "2.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "A1B2C3D4-0002-0002-0002-000000000002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Full access to all Pro features, billed monthly",
+              "displayName" : "ActivSlot Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.activslot.healthapp.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "ActivSlot Pro Monthly",
+          "subscriptionGroupID" : "D7E4B3A1-1111-2222-3333-444455556666",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "19.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "A1B2C3D4-0003-0003-0003-000000000003",
+          "introductoryOffer" : {
+            "internalID" : "E5F6A7B8-0001-0001-0001-000000000001",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W",
+            "numberOfPeriods" : 1,
+            "displayPrice" : "0"
+          },
+          "localizations" : [
+            {
+              "description" : "Full access to all Pro features, billed annually with 7-day free trial",
+              "displayName" : "ActivSlot Pro Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.activslot.healthapp.pro.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "ActivSlot Pro Annual",
+          "subscriptionGroupID" : "D7E4B3A1-1111-2222-3333-444455556666",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

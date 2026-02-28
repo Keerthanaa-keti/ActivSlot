@@ -276,13 +276,27 @@ class NotificationManager: ObservableObject {
             options: []
         )
 
+        // Walk Buddy category
+        let confirmWalkAction = UNNotificationAction(
+            identifier: "CONFIRM_WALK",
+            title: "Let's Do It!",
+            options: [.foreground]
+        )
+        let walkBuddyCategory = UNNotificationCategory(
+            identifier: "WALK_BUDDY_SUGGESTION",
+            actions: [confirmWalkAction, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
         UNUserNotificationCenter.current().setNotificationCategories([
             walkReminderCategory,
             behindOnStepsCategory,
             eveningCategory,
             walkableCategory,
             workoutCategory,
-            planReadyCategory
+            planReadyCategory,
+            walkBuddyCategory
         ])
     }
 
@@ -300,7 +314,7 @@ class NotificationManager: ObservableObject {
         case .endOfDay:
             // Set to midnight tonight (start of tomorrow)
             var components = calendar.dateComponents([.year, .month, .day], from: now)
-            components.day! += 1
+            components.day = (components.day ?? 1) + 1
             components.hour = 0
             components.minute = 0
             snoozedUntil = calendar.date(from: components)
@@ -471,6 +485,7 @@ class NotificationManager: ObservableObject {
 
     func scheduleWalkableMeetingReminder(for event: CalendarEvent) {
         guard isAuthorized && walkableMeetingRemindersEnabled else { return }
+        guard UserDefaults.standard.bool(forKey: "cachedProEntitlement") else { return }
         guard event.isWalkable else { return }
 
         let content = UNMutableNotificationContent()
@@ -574,6 +589,7 @@ class NotificationManager: ObservableObject {
 
     func scheduleStreakAtRiskNotification(currentSteps: Int, goalSteps: Int, currentStreak: Int) {
         guard isAuthorized else { return }
+        guard UserDefaults.standard.bool(forKey: "cachedProEntitlement") else { return }
         guard currentStreak > 0 else { return } // Only if they have a streak to protect
         guard currentSteps < goalSteps else { return } // Only if goal not yet met
 
@@ -710,6 +726,7 @@ class NotificationManager: ObservableObject {
     /// Schedule notification when user is behind on steps at a checkpoint
     func scheduleBehindOnStepsNotification(deficit: Int, suggestedSlot: SmartPlannerEngine.PlannedActivity.TimeSlot?) async {
         guard isAuthorized else { return }
+        guard UserDefaults.standard.bool(forKey: "cachedProEntitlement") else { return }
 
         // Check if notifications are snoozed
         guard !isSnoozed else {
@@ -875,6 +892,31 @@ class NotificationManager: ObservableObject {
 
     func cancelAllNotifications() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    }
+
+    // MARK: - Walk Buddy Notifications
+
+    /// Sends a local notification suggesting a shared walk slot to the current user.
+    /// (Partner receives a push via CloudKit — this notifies the current user that they've "sent" the suggestion.)
+    func scheduleWalkBuddySuggestion(slot: SharedWalkSlot, partnerName: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Walk with \(partnerName)?"
+        content.body = "You both have a free slot at \(slot.formattedTime) (\(slot.formattedDuration)). Tap to confirm!"
+        content.sound = .default
+        content.categoryIdentifier = "WALK_BUDDY_SUGGESTION"
+        content.userInfo = [
+            "type": "walkBuddySuggestion",
+            "slotTime": slot.startTime.timeIntervalSince1970,
+            "slotDuration": slot.duration,
+            "partnerName": partnerName
+        ]
+
+        // Fire immediately (user has already tapped "Suggest")
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let identifier = "walkBuddy-\(Int(slot.startTime.timeIntervalSince1970))"
+
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
     }
 
     // MARK: - Helpers

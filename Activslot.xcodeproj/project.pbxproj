@@ -48,6 +48,12 @@
 		LEGAL0000001 /* LegalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = LEGAL0000011 /* LegalViews.swift */; };
 		DPSYN0000001 /* DailyPlanSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DPSYN0000011 /* DailyPlanSyncCoordinator.swift */; };
 		SMINT0000001 /* SmartPlannerIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMINT0000011 /* SmartPlannerIntroView.swift */; };
+		PARTP0000001 /* PartnerProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = PARTP0000011 /* PartnerProfile.swift */; };
+		CWMGR0000001 /* CoupleWalkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CWMGR0000011 /* CoupleWalkManager.swift */; };
+		CWVEW0000001 /* CoupleWalkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CWVEW0000011 /* CoupleWalkView.swift */; };
+		SUBMG0000001 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SUBMG0000011 /* SubscriptionManager.swift */; };
+		PAYWL0000001 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PAYWL0000011 /* PaywallView.swift */; };
+		PFOVR0000001 /* PremiumFeatureOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = PFOVR0000011 /* PremiumFeatureOverlay.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -94,6 +100,13 @@
 		BUNDL0000011 /* Bundle+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bundle+Extensions.swift"; sourceTree = "<group>"; };
 		LEGAL0000011 /* LegalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalViews.swift; sourceTree = "<group>"; };
 		DPSYN0000011 /* DailyPlanSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyPlanSyncCoordinator.swift; sourceTree = "<group>"; };
+		PARTP0000011 /* PartnerProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerProfile.swift; sourceTree = "<group>"; };
+		CWMGR0000011 /* CoupleWalkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoupleWalkManager.swift; sourceTree = "<group>"; };
+		CWVEW0000011 /* CoupleWalkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoupleWalkView.swift; sourceTree = "<group>"; };
+		SUBMG0000011 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
+		PAYWL0000011 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		PFOVR0000011 /* PremiumFeatureOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumFeatureOverlay.swift; sourceTree = "<group>"; };
+		STKIT0000011 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -127,6 +140,7 @@
 				001A00031 /* Assets.xcassets */,
 				001A00032 /* Info.plist */,
 				001A00033 /* Activslot.entitlements */,
+				STKIT0000011 /* Configuration.storekit */,
 			);
 			path = Activslot;
 			sourceTree = "<group>";
@@ -164,6 +178,8 @@
 				72C942A4BBBB0001CAFBCC /* TestDataManager.swift */,
 				STREAK000011 /* StreakManager.swift */,
 				DPSYN0000011 /* DailyPlanSyncCoordinator.swift */,
+				CWMGR0000011 /* CoupleWalkManager.swift */,
+				SUBMG0000011 /* SubscriptionManager.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -175,6 +191,7 @@
 				001A0001F /* MovementPlan.swift */,
 				001A00020 /* CalendarEvent.swift */,
 				72C94288CCCC0001CAFBCC /* PlannedActivity.swift */,
+				PARTP0000011 /* PartnerProfile.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -190,6 +207,8 @@
 				001A00077 /* Settings */,
 				72C9429DFFFF0005CAFBCC /* Profile */,
 				72C942A3AAAA0004CAFBCC /* SmartPlan */,
+				CWGRP0000011 /* CoupleWalk */,
+				PWGRP0000011 /* Paywall */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -261,6 +280,23 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		CWGRP0000011 /* CoupleWalk */ = {
+			isa = PBXGroup;
+			children = (
+				CWVEW0000011 /* CoupleWalkView.swift */,
+			);
+			path = CoupleWalk;
+			sourceTree = "<group>";
+		};
+		PWGRP0000011 /* Paywall */ = {
+			isa = PBXGroup;
+			children = (
+				PAYWL0000011 /* PaywallView.swift */,
+				PFOVR0000011 /* PremiumFeatureOverlay.swift */,
+			);
+			path = Paywall;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -296,6 +332,11 @@
 				TargetAttributes = {
 					001A00090 = {
 						CreatedOnToolsVersion = 15.0;
+						SystemCapabilities = {
+							"com.apple.iCloud" = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -375,6 +416,12 @@
 				CELEB0000001 /* CelebrationView.swift in Sources */,
 				BUNDL0000001 /* Bundle+Extensions.swift in Sources */,
 				LEGAL0000001 /* LegalViews.swift in Sources */,
+				PARTP0000001 /* PartnerProfile.swift in Sources */,
+				CWMGR0000001 /* CoupleWalkManager.swift in Sources */,
+				CWVEW0000001 /* CoupleWalkView.swift in Sources */,
+				SUBMG0000001 /* SubscriptionManager.swift in Sources */,
+				PAYWL0000001 /* PaywallView.swift in Sources */,
+				PFOVR0000001 /* PremiumFeatureOverlay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

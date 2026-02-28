@@ -446,7 +446,7 @@ struct IOSCalendarSyncGuide: View {
             HStack {
                 Image(systemName: "star.fill")
                     .foregroundColor(.yellow)
-                Text("Recommended - Works without admin approval")
+                Text("Works without IT admin approval")
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(.green)
@@ -459,97 +459,60 @@ struct IOSCalendarSyncGuide: View {
             Text("Sync Outlook to iOS Calendar")
                 .font(.headline)
 
-            Text("This method syncs your Outlook calendar to the built-in iOS Calendar app. Activslot then reads from iOS Calendar - no direct Outlook connection needed.")
+            Text("Tap the button below to go straight to Calendar Settings, then follow these 3 steps.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            // Steps
-            VStack(alignment: .leading, spacing: 16) {
-                SetupStepWithIcon(
-                    number: 1,
-                    icon: "gear",
-                    title: "Open iPhone Settings",
-                    description: "Go to your iPhone's Settings app"
-                )
-
-                SetupStepWithIcon(
-                    number: 2,
-                    icon: "calendar",
-                    title: "Tap Calendar",
-                    description: "Scroll down and tap 'Calendar'"
-                )
-
-                SetupStepWithIcon(
-                    number: 3,
-                    icon: "person.crop.circle",
-                    title: "Tap Accounts",
-                    description: "Select 'Accounts' at the top"
-                )
-
-                SetupStepWithIcon(
-                    number: 4,
-                    icon: "plus.circle.fill",
-                    title: "Add Account",
-                    description: "Tap 'Add Account' → Select 'Microsoft Exchange'"
-                )
-
-                SetupStepWithIcon(
-                    number: 5,
-                    icon: "envelope.fill",
-                    title: "Enter Work Email",
-                    description: "Type your work email address and tap 'Next'"
-                )
-
-                SetupStepWithIcon(
-                    number: 6,
-                    icon: "lock.shield.fill",
-                    title: "Sign In with SSO",
-                    description: "Your company's login page will appear. Sign in with your work credentials."
-                )
-
-                SetupStepWithIcon(
-                    number: 7,
-                    icon: "calendar.badge.checkmark",
-                    title: "Enable Calendars",
-                    description: "Toggle ON 'Calendars' (you can disable Mail, Contacts, etc. if you prefer)"
-                )
-
-                SetupStepWithIcon(
-                    number: 8,
-                    icon: "arrow.uturn.backward.circle.fill",
-                    title: "Return to Activslot",
-                    description: "Come back here - your Outlook calendar will appear automatically!"
-                )
+            // Open Settings button (prominent, before the steps)
+            Button {
+                if let url = URL(string: "App-prefs:CALENDAR") {
+                    UIApplication.shared.open(url)
+                } else if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.up.right.square.fill")
+                    Text("Open Calendar Settings")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(12)
             }
 
             Divider()
 
-            // Open Settings buttons
-            VStack(spacing: 12) {
-                Button {
-                    // Try to open Calendar settings directly
-                    if let url = URL(string: "App-prefs:CALENDAR") {
-                        UIApplication.shared.open(url)
-                    } else if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "calendar.badge.plus")
-                        Text("Open Calendar Settings")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                }
+            // Condensed 3-step guide
+            VStack(alignment: .leading, spacing: 16) {
+                SetupStepWithIcon(
+                    number: 1,
+                    icon: "plus.circle.fill",
+                    title: "Add Account",
+                    description: "In Calendar Settings, tap Accounts → Add Account → Microsoft Exchange"
+                )
 
-                Text("After adding the account, return here and tap 'Done' to refresh.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
+                SetupStepWithIcon(
+                    number: 2,
+                    icon: "lock.shield.fill",
+                    title: "Enter & Sign In",
+                    description: "Type your work email and sign in with your company credentials (SSO supported)"
+                )
+
+                SetupStepWithIcon(
+                    number: 3,
+                    icon: "arrow.uturn.backward.circle.fill",
+                    title: "Return to Activslot",
+                    description: "Make sure Calendars is toggled ON, then come back here — your meetings appear automatically!"
+                )
             }
+
+            Text("After adding the account, return here and tap 'Done' to refresh.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
     }
 }
@@ -1368,7 +1331,8 @@ struct FeedbackView: View {
     }
 
     private func sendFeedbackViaEmail() {
-        let subject = "Activslot Feedback: \(feedbackType.rawValue)"
+        let appVersion = Bundle.main.appVersion
+        let subject = "ActivSlot Feedback: \(feedbackType.rawValue)"
         let body = """
         Feedback Type: \(feedbackType.rawValue)
 
@@ -1376,7 +1340,7 @@ struct FeedbackView: View {
 
         ---
         User Email: \(userEmail.isEmpty ? "Not provided" : userEmail)
-        App Version: 1.0.0
+        App Version: \(appVersion)
         Device: \(UIDevice.current.model)
         iOS: \(UIDevice.current.systemVersion)
         """
@@ -1384,7 +1348,7 @@ struct FeedbackView: View {
         let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let encodedBody = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
 
-        if let url = URL(string: "mailto:feedback@activslot.com?subject=\(encodedSubject)&body=\(encodedBody)") {
+        if let url = URL(string: "mailto:support@thunaiapp.com?subject=\(encodedSubject)&body=\(encodedBody)") {
             UIApplication.shared.open(url)
         }
     }

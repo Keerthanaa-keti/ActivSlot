@@ -7,6 +7,7 @@ struct PermissionsView: View {
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var outlookManager: OutlookManager
 
+    @AppStorage("calendarSkipped") private var calendarSkipped = false
     @State private var isRequestingPermissions = false
     @State private var healthPermissionGranted = false
     @State private var calendarPermissionGranted = false
@@ -102,7 +103,10 @@ struct PermissionsView: View {
             .padding(.bottom, 12)
 
             // Skip button
-            Button(action: onContinue) {
+            Button {
+                calendarSkipped = true
+                onContinue()
+            } label: {
                 Text("Skip for now")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -446,7 +450,8 @@ struct OutlookSignInSheet: View {
     @EnvironmentObject var calendarManager: CalendarManager
     @State private var showError = false
     @State private var errorMessage = ""
-    @State private var selectedOption: CalendarOption = .iosSync
+    @AppStorage("calendarSkipped") private var calendarSkipped = false
+    @State private var selectedOption: CalendarOption = .microsoftSignIn
 
     enum CalendarOption {
         case iosSync
@@ -522,52 +527,65 @@ struct OutlookSignInSheet: View {
 
                     // Options
                     VStack(spacing: 12) {
-                        // Option 1: Use iOS Calendar (Recommended)
-                        CalendarOptionCard(
-                            isSelected: selectedOption == .iosSync,
-                            icon: "iphone",
-                            title: "Use iPhone Calendar",
-                            subtitle: "Works with any Outlook account synced to your iPhone. No IT approval needed.",
-                            badge: "Recommended"
-                        ) {
-                            selectedOption = .iosSync
-                        }
-
-                        // Option 2: Microsoft Sign In (May require IT)
+                        // Option 1: Sign in with Microsoft (Recommended) — in-app OAuth, no IT approval
                         CalendarOptionCard(
                             isSelected: selectedOption == .microsoftSignIn,
                             icon: "person.badge.key",
                             title: "Sign in with Microsoft",
-                            subtitle: "Direct API access. May require IT admin approval for work accounts.",
-                            badge: nil
+                            subtitle: "One-tap sign in. Stays in app. No extra steps needed.",
+                            badge: "Recommended"
                         ) {
                             selectedOption = .microsoftSignIn
+                        }
+
+                        // Option 2: Use iPhone Calendar — if IT blocks direct OAuth
+                        CalendarOptionCard(
+                            isSelected: selectedOption == .iosSync,
+                            icon: "iphone",
+                            title: "Use iPhone Calendar",
+                            subtitle: "If the above doesn't work, sync via iOS Settings instead.",
+                            badge: nil
+                        ) {
+                            selectedOption = .iosSync
                         }
                     }
                     .padding(.horizontal, 24)
 
+                    // Fallback hint when Microsoft sign-in is selected
+                    if selectedOption == .microsoftSignIn {
+                        Text("If your organization blocks this, switch to \"Use iPhone Calendar\" above.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+
                     // Setup instructions for iOS sync
                     if selectedOption == .iosSync && !calendarManager.hasOutlookCalendar {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("How to add Outlook to iPhone")
+                            Text("3 steps to add Outlook to iPhone")
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
 
                             VStack(alignment: .leading, spacing: 8) {
-                                SetupStepRow(number: 1, text: "Open iPhone Settings")
-                                SetupStepRow(number: 2, text: "Tap Calendar → Accounts")
-                                SetupStepRow(number: 3, text: "Add Account → Microsoft Exchange")
-                                SetupStepRow(number: 4, text: "Enter your work email")
+                                SetupStepRow(number: 1, text: "Open Calendar Settings (tap button below)")
+                                SetupStepRow(number: 2, text: "Accounts → Add Account → Microsoft Exchange")
+                                SetupStepRow(number: 3, text: "Sign in with your work email, then return here")
                             }
 
                             Button {
-                                if let url = URL(string: "App-Prefs:root=ACCOUNTS_AND_PASSWORDS") {
+                                if let url = URL(string: "App-prefs:CALENDAR") {
+                                    UIApplication.shared.open(url)
+                                } else if let url = URL(string: UIApplication.openSettingsURLString) {
                                     UIApplication.shared.open(url)
                                 }
                             } label: {
-                                Text("Open Settings")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
+                                HStack {
+                                    Image(systemName: "arrow.up.right.square.fill")
+                                    Text("Open Calendar Settings")
+                                        .fontWeight(.medium)
+                                }
+                                .font(.caption)
                             }
                             .padding(.top, 4)
                         }
@@ -622,6 +640,7 @@ struct OutlookSignInSheet: View {
 
                     // Skip Button
                     Button("Skip for now") {
+                        calendarSkipped = true
                         onDone()
                     }
                     .foregroundColor(.secondary)
@@ -633,6 +652,7 @@ struct OutlookSignInSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Skip") {
+                        calendarSkipped = true
                         onDone()
                     }
                     .foregroundColor(.secondary)

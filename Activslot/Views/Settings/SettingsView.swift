@@ -8,13 +8,18 @@ struct SettingsView: View {
     @EnvironmentObject var outlookManager: OutlookManager
 
     @StateObject private var notificationManager = NotificationManager.shared
+    @ObservedObject private var subscriptionManager = SubscriptionManager.shared
 
     @State private var showResetConfirmation = false
     @State private var showCalendarSelection = false
     @State private var showOutlookError = false
     @State private var outlookErrorMessage = ""
+    @State private var showPaywall = false
+    @State private var versionTapCount = 0
+    @State private var showDebugUnlocked = false
     #if DEBUG
     @State private var showTestDataGenerator = false
+    @AppStorage("debugToolsEnabled") private var debugToolsEnabled = false
     #endif
 
     // Time picker states
@@ -27,6 +32,81 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                // ActivSlot Pro Section
+                if !subscriptionManager.isProUser {
+                    Section {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "sparkles")
+                                    .font(.title2)
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [.orange, .pink],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("ActivSlot Pro")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.primary)
+                                    Text("Autopilot, insights, walk buddy & more")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                Text("Upgrade")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule()
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [.orange, .pink],
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
+                                    )
+                            }
+                        }
+                    } header: {
+                        Text("ActivSlot Pro")
+                    }
+                } else {
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.title2)
+                                .foregroundColor(.green)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("ActivSlot Pro")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                Text("All features unlocked")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text("Active")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+
                 // Daily Schedule Section
                 Section {
                     TimePickerRow(
@@ -215,20 +295,44 @@ struct SettingsView: View {
 
                 // Calendar Sync Section
                 Section {
-                    NavigationLink {
-                        CalendarSyncSettingsView()
-                    } label: {
-                        HStack {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .foregroundColor(.blue)
-                                .frame(width: 28)
+                    if subscriptionManager.isProUser {
+                        NavigationLink {
+                            CalendarSyncSettingsView()
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .foregroundColor(.blue)
+                                    .frame(width: 28)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Export to Calendar")
-                                    .foregroundColor(.primary)
-                                Text("Add fitness plans to your calendar")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Export to Calendar")
+                                        .foregroundColor(.primary)
+                                    Text("Add fitness plans to your calendar")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    } else {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .foregroundColor(.blue)
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Export to Calendar")
+                                        .foregroundColor(.primary)
+                                    Text("Add fitness plans to your calendar")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                ProBadge()
                             }
                         }
                     }
@@ -236,6 +340,57 @@ struct SettingsView: View {
                     Text("Export Settings")
                 } footer: {
                     Text("Add your walk breaks and workouts to Google, iCloud, or Outlook calendars")
+                }
+
+                // Walk Buddy Section
+                Section {
+                    if subscriptionManager.isProUser {
+                        NavigationLink {
+                            CoupleWalkView()
+                        } label: {
+                            HStack {
+                                Image(systemName: "figure.2.and.child.holdinghands")
+                                    .foregroundColor(.purple)
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Walk Buddy")
+                                        .font(.subheadline)
+                                        .foregroundColor(.primary)
+                                    Text("Find shared walk times with a partner")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    } else {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "figure.2.and.child.holdinghands")
+                                    .foregroundColor(.purple)
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Walk Buddy")
+                                        .font(.subheadline)
+                                        .foregroundColor(.primary)
+                                    Text("Find shared walk times with a partner")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                ProBadge()
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Walk Buddy")
+                } footer: {
+                    Text("Share your availability with a partner to find walk times that work for both of you")
                 }
 
                 // Step Goal with Age-Based Suggestions
@@ -417,28 +572,49 @@ struct SettingsView: View {
                             .padding(.leading, 36)
                         }
 
-                        // Walkable Meeting Reminders
-                        Toggle(isOn: $notificationManager.walkableMeetingRemindersEnabled) {
-                            HStack {
-                                Image(systemName: "figure.walk")
-                                    .foregroundColor(.green)
-                                    .frame(width: 28)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Walk-This-Call Alerts")
-                                    Text("Reminder before walkable meetings")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                        // Walkable Meeting Reminders (Pro)
+                        if subscriptionManager.isProUser {
+                            Toggle(isOn: $notificationManager.walkableMeetingRemindersEnabled) {
+                                HStack {
+                                    Image(systemName: "figure.walk")
+                                        .foregroundColor(.green)
+                                        .frame(width: 28)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Walk-This-Call Alerts")
+                                        Text("Reminder before walkable meetings")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                             }
-                        }
 
-                        if notificationManager.walkableMeetingRemindersEnabled {
-                            Picker("Remind me", selection: $notificationManager.walkableMeetingLeadTime) {
-                                Text("5 min before").tag(5)
-                                Text("10 min before").tag(10)
-                                Text("15 min before").tag(15)
+                            if notificationManager.walkableMeetingRemindersEnabled {
+                                Picker("Remind me", selection: $notificationManager.walkableMeetingLeadTime) {
+                                    Text("5 min before").tag(5)
+                                    Text("10 min before").tag(10)
+                                    Text("15 min before").tag(15)
+                                }
+                                .padding(.leading, 36)
                             }
-                            .padding(.leading, 36)
+                        } else {
+                            Button {
+                                showPaywall = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "figure.walk")
+                                        .foregroundColor(.green)
+                                        .frame(width: 28)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Walk-This-Call Alerts")
+                                            .foregroundColor(.primary)
+                                        Text("Reminder before walkable meetings")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    ProBadge()
+                                }
+                            }
                         }
 
                         // Workout Reminders
@@ -529,19 +705,19 @@ struct SettingsView: View {
                     Text("Permissions")
                 }
 
-                // Feedback & Support
+                // Support
                 Section {
                     NavigationLink {
                         FeedbackView()
                     } label: {
                         HStack {
-                            Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                                .foregroundColor(.purple)
+                            Image(systemName: "envelope.fill")
+                                .foregroundColor(.blue)
                                 .frame(width: 28)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Send Feedback")
                                     .foregroundColor(.primary)
-                                Text("Help us improve Activslot")
+                                Text("support@thunaiapp.com")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -560,39 +736,40 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Feedback & Support")
-                } footer: {
-                    Text("Your feedback helps us build a better app for busy professionals")
+                    Text("Support")
                 }
 
                 // About
                 Section {
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        Text(Bundle.main.appVersion)
-                            .foregroundColor(.secondary)
+                    Button {
+                        handleVersionTap()
+                    } label: {
+                        HStack {
+                            Text("Version")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text(Bundle.main.appVersion)
+                                .foregroundColor(.secondary)
+                        }
                     }
 
                     NavigationLink {
                         PrivacyPolicyView()
                     } label: {
-                        HStack {
-                            Image(systemName: "hand.raised.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 28)
-                            Text("Privacy Policy")
-                        }
+                        Text("Privacy Policy")
                     }
 
                     NavigationLink {
                         TermsOfServiceView()
                     } label: {
-                        HStack {
-                            Image(systemName: "doc.text.fill")
-                                .foregroundColor(.gray)
-                                .frame(width: 28)
-                            Text("Terms of Service")
+                        Text("Terms of Service")
+                    }
+
+                    if subscriptionManager.isProUser {
+                        Button("Manage Subscription") {
+                            if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                                UIApplication.shared.open(url)
+                            }
                         }
                     }
 
@@ -605,49 +782,54 @@ struct SettingsView: View {
                 }
 
                 #if DEBUG
-                // Debug/Testing Section
-                Section {
-                    Button {
-                        showTestDataGenerator = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "testtube.2")
-                                .foregroundColor(.purple)
-                            Text("Test Data Generator")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundColor(.secondary)
-                                .font(.caption)
+                if debugToolsEnabled {
+                    Section {
+                        Button {
+                            showTestDataGenerator = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "testtube.2")
+                                    .foregroundColor(.purple)
+                                Text("Test Data Generator")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.secondary)
+                                    .font(.caption)
+                            }
                         }
-                    }
 
-                    Button {
-                        Task {
-                            try? await calendarManager.createSampleEventsForTesting()
+                        Button {
+                            Task {
+                                try? await calendarManager.createSampleEventsForTesting()
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "calendar.badge.plus")
+                                    .foregroundColor(.blue)
+                                Text("Create Sample Schedule")
+                            }
                         }
-                    } label: {
-                        HStack {
-                            Image(systemName: "calendar.badge.plus")
-                                .foregroundColor(.blue)
-                            Text("Quick: Create Sample Schedule")
-                        }
-                    }
 
-                    Button {
-                        Task {
-                            try? await calendarManager.clearTodayEvents()
+                        Button {
+                            Task {
+                                try? await calendarManager.clearTodayEvents()
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                                Text("Clear Today's Events")
+                            }
                         }
-                    } label: {
-                        HStack {
-                            Image(systemName: "trash")
-                                .foregroundColor(.red)
-                            Text("Quick: Clear Today's Events")
+
+                        Button("Hide Debug Tools") {
+                            debugToolsEnabled = false
                         }
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                    } header: {
+                        Text("Developer")
                     }
-                } header: {
-                    Text("Debug Tools")
-                } footer: {
-                    Text("Test Data Generator provides comprehensive test scenarios for calendar, HealthKit, and activities")
                 }
                 #endif
             }
@@ -672,6 +854,14 @@ struct SettingsView: View {
                 CalendarSelectionView()
                     .environmentObject(calendarManager)
             }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
+            .alert("Developer Mode", isPresented: $showDebugUnlocked) {
+                Button("OK") {}
+            } message: {
+                Text("Debug tools are now visible at the bottom of Settings.")
+            }
             #if DEBUG
             .sheet(isPresented: $showTestDataGenerator) {
                 TestDataGeneratorView()
@@ -686,6 +876,17 @@ struct SettingsView: View {
         breakfastTime = userPreferences.breakfastTime.date
         lunchTime = userPreferences.lunchTime.date
         dinnerTime = userPreferences.dinnerTime.date
+    }
+
+    private func handleVersionTap() {
+        #if DEBUG
+        versionTapCount += 1
+        if versionTapCount >= 7 && !debugToolsEnabled {
+            debugToolsEnabled = true
+            showDebugUnlocked = true
+            versionTapCount = 0
+        }
+        #endif
     }
 
     private func requestAppStoreReview() {

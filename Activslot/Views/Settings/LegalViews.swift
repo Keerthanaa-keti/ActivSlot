@@ -70,7 +70,7 @@ struct PrivacyPolicyView: View {
 
                     SectionView(
                         title: "Contact Us",
-                        content: "If you have questions about this Privacy Policy, please contact us at privacy@activslot.com"
+                        content: "If you have questions about this Privacy Policy, please contact us at support@thunaiapp.com"
                     )
                 }
             }
@@ -144,7 +144,7 @@ struct TermsOfServiceView: View {
 
                     SectionView(
                         title: "Contact",
-                        content: "For questions about these Terms, contact us at legal@activslot.com"
+                        content: "For questions about these Terms, contact us at support@thunaiapp.com"
                     )
                 }
             }

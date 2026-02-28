@@ -11,6 +11,7 @@ struct ActivslotApp: App {
     @StateObject private var userPreferences = UserPreferences.shared
     @StateObject private var outlookManager = OutlookManager.shared
     @StateObject private var notificationManager = NotificationManager.shared
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -22,6 +23,7 @@ struct ActivslotApp: App {
                 .environmentObject(userPreferences)
                 .environmentObject(outlookManager)
                 .environmentObject(notificationManager)
+                .environmentObject(subscriptionManager)
                 .onChange(of: scenePhase) { _, newPhase in
                     handleScenePhaseChange(newPhase)
                 }
@@ -29,11 +31,68 @@ struct ActivslotApp: App {
                 .task {
                     await runDebugTestScenarioIfRequested()
                 }
+                .onOpenURL { url in
+                    handleDebugURL(url)
+                }
                 #endif
         }
     }
 
     #if DEBUG
+    /// Handles activslot:// deep links for simulator testing.
+    ///   activslot://test/<scenario>   — data scenarios
+    ///   activslot://action/autopilot  — trigger autopilot walk scheduling
+    ///   activslot://action/notify     — fire a test walk-buddy notification
+    private func handleDebugURL(_ url: URL) {
+        guard url.scheme == "activslot" else { return }
+        let host     = url.host ?? ""
+        let segment  = url.pathComponents.dropFirst().first ?? ""
+        print("DEBUG URL: activslot://\(host)/\(segment)")
+
+        Task {
+            switch (host, segment) {
+
+            // ── test scenarios ───────────────────────────────────────────
+            case ("test", "sarah"):        await TestDataManager.shared.setupSarahScenario()
+            case ("test", "alex"):         await TestDataManager.shared.setupAlexScenario()
+            case ("test", "walk_buddy"):   await TestDataManager.shared.setupWalkBuddyTestScenario()
+            case ("test", "busy"):         await TestDataManager.shared.setupBusyExecutiveScenario()
+            case ("test", "light"):        await TestDataManager.shared.setupLightDayScenario()
+            case ("test", "almost_goal"):  await TestDataManager.shared.setupAlmostThereScenario()
+            case ("test", "goal_reached"): await TestDataManager.shared.setupGoalReachedScenario()
+            case ("test", "clear"):        await TestDataManager.shared.clearAllTestData()
+
+            // ── actions ───────────────────────────────────────────────────
+            case ("action", "autopilot"):
+                // Schedule walks for TODAY (not just tomorrow) for immediate testing
+                await AutopilotManager.shared.scheduleWalksForTomorrow()
+                print("DEBUG: Autopilot scheduling triggered")
+
+            case ("action", "notify"):
+                // Fire a test walk-buddy suggestion notification immediately
+                let testSlot = SharedWalkSlot(
+                    startTime: Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date(),
+                    duration: 30,
+                    confidenceScore: 0.9
+                )
+                NotificationManager.shared.scheduleWalkBuddySuggestion(
+                    slot: testSlot,
+                    partnerName: CoupleWalkManager.shared.partnerProfile?.partnerName ?? "Your Partner"
+                )
+                print("DEBUG: Walk buddy notification scheduled")
+
+            case ("action", "behind"):
+                // Trigger a "behind on steps" notification for testing
+                await NotificationManager.shared.scheduleBehindOnStepsNotification(
+                    deficit: 3000, suggestedSlot: nil)
+                print("DEBUG: Behind-on-steps notification scheduled")
+
+            default:
+                print("DEBUG URL: unknown route activslot://\(host)/\(segment)")
+            }
+        }
+    }
+
     /// Runs a test scenario based on launch argument or environment variable
     /// Usage: Set TEST_SCENARIO environment variable to one of:
     /// - "busy_executive", "light_day", "almost_goal", "goal_reached", "walkable_meetings", "full_test"
@@ -160,7 +219,11 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             forTaskWithIdentifier: BackgroundTaskIdentifier.eveningPlanSync,
             using: nil
         ) { task in
-            self.handleEveningPlanSync(task: task as! BGAppRefreshTask)
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            self.handleEveningPlanSync(task: refreshTask)
         }
 
         // Register checkpoint evaluation task
@@ -168,7 +231,11 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             forTaskWithIdentifier: BackgroundTaskIdentifier.checkpointEvaluation,
             using: nil
         ) { task in
-            self.handleCheckpointEvaluation(task: task as! BGAppRefreshTask)
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            self.handleCheckpointEvaluation(task: refreshTask)
         }
 
         // Schedule initial tasks

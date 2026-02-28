@@ -7,7 +7,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>Activslot uses your step count and workout data to track your progress and suggest the best times for walks.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Activslot can save step data for testing purposes in debug builds.</string>
+	<string>Activslot may save workout data to Apple Health to keep your fitness records in sync.</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Activslot sends notifications to remind you about walking meetings, evening briefings, and when your streak is at risk.</string>
 	<key>UIApplicationSceneManifest</key>
@@ -29,6 +29,7 @@
 			<array>
 				<string>msala658536a-394e-455e-814b-3ca249914d14</string>
 				<string>msauth.com.activslot.healthapp</string>
+				<string>activslot</string>
 			</array>
 		</dict>
 	</array>

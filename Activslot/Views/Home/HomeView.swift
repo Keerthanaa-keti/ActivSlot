@@ -4,6 +4,7 @@ struct HomeView: View {
     @EnvironmentObject var healthKitManager: HealthKitManager
     @EnvironmentObject var userPreferences: UserPreferences
     @EnvironmentObject var calendarManager: CalendarManager
+    @EnvironmentObject var outlookManager: OutlookManager
     @StateObject private var planManager = MovementPlanManager.shared
     @StateObject private var insightsManager = PersonalInsightsManager.shared
     @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
@@ -13,12 +14,14 @@ struct HomeView: View {
     // Trigger to reset to Today tab when bottom tab is tapped
     var resetToTodayTrigger: Int = 0
 
+    @AppStorage("calendarSkipped") private var calendarSkipped = false
     @State private var isRefreshing = false
     @State private var showWorkoutSetup = false
     @State private var showCalendarView = false
     @State private var showScheduleWalk = false
     @State private var showScheduleWorkout = false
     @State private var showScheduledActivities = false
+    @State private var showConnectCalendarSheet = false
     @State private var customTimeRequest: CustomTimeRequest?
     @State private var conflictToResolve: ScheduleConflict?
     @State private var selectedDay: SelectedDay = .today
@@ -41,6 +44,15 @@ struct HomeView: View {
                 VStack(spacing: 20) {
                     // Day Selector
                     DaySelector(selectedDay: $selectedDay)
+
+                    // Connect Calendar Banner (shown when user skipped calendar setup)
+                    if calendarSkipped && !calendarManager.hasOutlookCalendar && !outlookManager.isSignedIn {
+                        ConnectCalendarBanner {
+                            showConnectCalendarSheet = true
+                        } onDismiss: {
+                            calendarSkipped = false
+                        }
+                    }
 
                     // Step Progress Card
                     StepProgressCard(
@@ -272,6 +284,17 @@ struct HomeView: View {
             .sheet(isPresented: $showScheduledActivities) {
                 ScheduledActivitiesListSheet()
             }
+            .sheet(isPresented: $showConnectCalendarSheet) {
+                OutlookSignInSheet(onDone: {
+                    showConnectCalendarSheet = false
+                    // Clear the skip flag once they successfully connect or dismiss
+                    if calendarManager.hasOutlookCalendar || outlookManager.isSignedIn {
+                        calendarSkipped = false
+                    }
+                })
+                .environmentObject(outlookManager)
+                .environmentObject(calendarManager)
+            }
             .sheet(item: $conflictToResolve) { conflict in
                 RescheduleActivitySheet(
                     activity: conflict.scheduledActivity,
@@ -355,6 +378,51 @@ struct HomeView: View {
         }
 
         return consolidatedSlots.sorted { $0.startTime < $1.startTime }
+    }
+}
+
+// MARK: - Connect Calendar Banner
+
+struct ConnectCalendarBanner: View {
+    let onConnect: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.title3)
+                .foregroundColor(.blue)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Connect your work calendar")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Text("Get smarter walk suggestions based on your meetings")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.08))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.blue.opacity(0.2), lineWidth: 1)
+        )
+        .onTapGesture {
+            onConnect()
+        }
     }
 }
 

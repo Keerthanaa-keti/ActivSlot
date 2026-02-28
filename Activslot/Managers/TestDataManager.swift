@@ -559,6 +559,94 @@ class TestDataManager: ObservableObject {
         lastGenerationStatus = "Walkable Meetings: 3 meetings good for walking"
     }
 
+    /// Scenario: Device A – Sarah's schedule (9am standup, 11am planning, 2pm demo, 4pm review)
+    /// Partner = Alex (8am, 10am, 1pm, 3pm) — shared free slots: 9:30-10, 12-1pm, 4pm+
+    func setupSarahScenario() async {
+        log("Setting up Sarah scenario (Device A)...")
+        await clearAllTestData()
+
+        guard let cal = eventStore.calendars(for: .event).first(where: { $0.allowsContentModifications }) else {
+            log("  No writable calendar found"); return
+        }
+        let today = Calendar.current.startOfDay(for: Date())
+        createEvent(on: today, calendar: cal, title: "Morning Standup",     startHour: 9,  duration: 30,  attendeeCount: 5)
+        createEvent(on: today, calendar: cal, title: "Product Planning",    startHour: 11, duration: 60,  attendeeCount: 8)
+        createEvent(on: today, calendar: cal, title: "Customer Demo",       startHour: 14, duration: 45,  attendeeCount: 4)
+        createEvent(on: today, calendar: cal, title: "Engineering Review",  startHour: 16, duration: 60,  attendeeCount: 10)
+
+        await generateStepScenario(.midDay)   // ~5,000 steps by midday
+
+        // Alex's schedule as the partner (different from Sarah's)
+        await CoupleWalkManager.shared.linkMockPartner(
+            name: "Alex",
+            schedule: [(8,30),(10,60),(13,45),(15,60)]
+        )
+        await refreshManagers()
+        log("Sarah scenario ready — partner Alex linked. Expected shared slots: 9:30am, 12pm, 4pm+")
+        lastGenerationStatus = "Sarah (Device A): 4 meetings + Alex linked as partner"
+    }
+
+    /// Scenario: Device B – Alex's schedule (8am standup, 10am sprint, 1pm client, 3pm design)
+    /// Partner = Sarah (9am, 11am, 2pm, 4pm) — shared free slots: 9:30-10, 12-1pm, 4pm+
+    func setupAlexScenario() async {
+        log("Setting up Alex scenario (Device B)...")
+        await clearAllTestData()
+
+        guard let cal = eventStore.calendars(for: .event).first(where: { $0.allowsContentModifications }) else {
+            log("  No writable calendar found"); return
+        }
+        let today = Calendar.current.startOfDay(for: Date())
+        createEvent(on: today, calendar: cal, title: "Team Standup",     startHour: 8,  duration: 30,  attendeeCount: 6)
+        createEvent(on: today, calendar: cal, title: "Sprint Planning",  startHour: 10, duration: 60,  attendeeCount: 9)
+        createEvent(on: today, calendar: cal, title: "Client Call",      startHour: 13, duration: 45,  attendeeCount: 3)
+        createEvent(on: today, calendar: cal, title: "Design Review",    startHour: 15, duration: 60,  attendeeCount: 7)
+
+        await generateStepScenario(.lowSteps)  // ~2,000 steps, needs more
+
+        // Sarah's schedule as the partner
+        await CoupleWalkManager.shared.linkMockPartner(
+            name: "Sarah",
+            schedule: [(9,30),(11,60),(14,45),(16,60)]
+        )
+        await refreshManagers()
+        log("Alex scenario ready — partner Sarah linked. Expected shared slots: 9:30am, 12pm, 4pm+")
+        lastGenerationStatus = "Alex (Device B): 4 meetings + Sarah linked as partner"
+    }
+
+    /// Scenario: Walk Buddy — realistic coupled schedule with overlapping free slots
+    /// Device A (this device): meetings at 9am, 11am, 2pm, 4pm
+    /// Mock partner (Device B): meetings at 8am, 10am, 1pm, 3pm, 5pm
+    /// Shared free slots should appear around: 9:30–10am, 11:30am–1pm, 2:45–3pm, 4:30–5pm
+    func setupWalkBuddyTestScenario() async {
+        log("Setting up Walk Buddy test scenario...")
+
+        await clearAllTestData()
+
+        guard let calendar = eventStore.calendars(for: .event).first(where: { $0.allowsContentModifications }) else {
+            log("  No writable calendar found")
+            return
+        }
+
+        let today = Calendar.current.startOfDay(for: Date())
+
+        // Device A schedule: spread-out meetings leaving walk-friendly gaps
+        createEvent(on: today, calendar: calendar, title: "Morning Standup",     startHour: 9,  duration: 30,  attendeeCount: 6)
+        createEvent(on: today, calendar: calendar, title: "Product Planning",    startHour: 11, duration: 60,  attendeeCount: 8)
+        createEvent(on: today, calendar: calendar, title: "Customer Demo",       startHour: 14, duration: 45,  attendeeCount: 5)
+        createEvent(on: today, calendar: calendar, title: "Engineering Review",  startHour: 16, duration: 60,  attendeeCount: 12)
+
+        // Set 5000 steps (mid-day, realistic)
+        await generateStepScenario(.midDay)
+
+        // Link mock partner (staggered schedule creates clear shared free windows)
+        await CoupleWalkManager.shared.linkMockPartner(name: "Alex (test partner)")
+
+        await refreshManagers()
+
+        log("Walk Buddy scenario ready — shared slots should appear around 10am, 12pm–1pm, 4:30pm")
+        lastGenerationStatus = "Walk Buddy: 4 meetings + mock partner linked"
+    }
+
     // MARK: - Manager Refresh
 
     private func refreshManagers() async {
@@ -631,6 +719,11 @@ struct TestDataGeneratorView: View {
                     Button("Walkable Meetings Available") {
                         Task { await testManager.setupWalkableMeetingsScenario() }
                     }
+
+                    Button("Walk Buddy Test (Mock Partner)") {
+                        Task { await testManager.setupWalkBuddyTestScenario() }
+                    }
+                    .foregroundColor(.purple)
                 }
 
                 // Individual Data Generation

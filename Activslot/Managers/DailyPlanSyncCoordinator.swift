@@ -82,6 +82,7 @@ class DailyPlanSyncCoordinator: ObservableObject {
     func syncTomorrowPlan() async {
         let prefs = UserPreferences.shared
         guard prefs.smartPlanAutoSyncEnabled else { return }
+        guard await SubscriptionManager.shared.isProUser else { return }
 
         guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) else { return }
         await generateAndSync(for: tomorrow, optimizationType: .initial)

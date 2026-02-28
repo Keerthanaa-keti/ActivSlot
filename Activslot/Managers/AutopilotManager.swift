@@ -70,6 +70,9 @@ class AutopilotManager: ObservableObject {
         let prefs = UserPreferences.shared
         guard prefs.autopilotEnabled else { return }
 
+        // Autopilot is a Pro feature
+        guard await SubscriptionManager.shared.isProUser else { return }
+
         let calendar = Calendar.current
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
         let tomorrowDateString = formatDateString(tomorrow)
