@@ -15,7 +15,7 @@ struct OnboardingContainerView: View {
     @State private var currentPage = 0
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
-    private let totalPages = 3
+    private let totalPages = 4
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,13 +31,17 @@ struct OnboardingContainerView: View {
                     .environmentObject(outlookManager)
                     .tag(1)
 
-                // Step 3: Reward - Show immediate value with their data
+                // Step 3: Connect work calendar instructions
+                CalendarConnectionGuideView(onContinue: { currentPage = 3 })
+                    .tag(2)
+
+                // Step 4: Reward - Show immediate value with their data
                 SmartPlannerIntroView(onContinue: {
                     completeOnboarding()
                 })
                 .environmentObject(userPreferences)
                 .environmentObject(calendarManager)
-                .tag(2)
+                .tag(3)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut, value: currentPage)

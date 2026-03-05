@@ -752,6 +752,117 @@ struct SetupStepRow: View {
     }
 }
 
+// MARK: - Calendar Connection Guide (Onboarding Step 3)
+
+struct CalendarConnectionGuideView: View {
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.1))
+                    .frame(width: 100, height: 100)
+
+                Image(systemName: "calendar.badge.plus")
+                    .font(.system(size: 44))
+                    .foregroundColor(.blue)
+            }
+            .padding(.bottom, 32)
+
+            Text("Connect Your Work Calendar")
+                .font(.system(size: 28, weight: .bold))
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 12)
+
+            Text("Add your work email (Outlook, Google, Exchange)\nto iPhone's Calendar so ActivSlot can see\nyour meetings and find walking time.")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 32)
+
+            // Step-by-step instructions
+            VStack(alignment: .leading, spacing: 16) {
+                OnboardingStepRow(number: 1, text: "Open iPhone Settings")
+                OnboardingStepRow(number: 2, text: "Tap Calendar → Accounts → Add Account")
+                OnboardingStepRow(number: 3, text: "Choose Microsoft Exchange or Google")
+                OnboardingStepRow(number: 4, text: "Sign in with your work email")
+                OnboardingStepRow(number: 5, text: "Make sure Calendar toggle is ON")
+            }
+            .padding(.horizontal, 40)
+            .padding(.bottom, 24)
+
+            // Open Settings button
+            Button {
+                if let url = URL(string: "App-prefs:ACCOUNTS_AND_PASSWORDS") {
+                    UIApplication.shared.open(url)
+                } else if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "gear")
+                    Text("Open iPhone Settings")
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(.blue)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(12)
+            }
+            .padding(.horizontal, 24)
+
+            Spacer()
+
+            // Continue button
+            Button(action: onContinue) {
+                Text("Continue")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.blue)
+                    .cornerRadius(14)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
+
+            Button(action: onContinue) {
+                Text("I'll do this later")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.bottom, 40)
+        }
+    }
+}
+
+struct OnboardingStepRow: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text("\(number)")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+                .frame(width: 24, height: 24)
+                .background(Color.blue)
+                .cornerRadius(12)
+
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+        }
+    }
+}
+
 #Preview {
     PermissionsView(onContinue: {})
         .environmentObject(HealthKitManager.shared)

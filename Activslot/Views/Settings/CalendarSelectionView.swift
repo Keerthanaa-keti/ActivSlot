@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudKit
 
 struct CalendarSelectionView: View {
     @EnvironmentObject var calendarManager: CalendarManager
@@ -1132,236 +1133,117 @@ struct ICloudSetupGuideView: View {
     }
 }
 
-// MARK: - Feedback View
+// MARK: - Feedback View (CloudKit-based)
 
 struct FeedbackView: View {
     @Environment(\.dismiss) var dismiss
 
-    @State private var feedbackType: FeedbackType = .suggestion
     @State private var feedbackText = ""
-    @State private var userEmail = ""
     @State private var showSuccessAlert = false
+    @State private var showErrorAlert = false
+    @State private var errorMessage = ""
     @State private var isSending = false
 
-    enum FeedbackType: String, CaseIterable {
-        case suggestion = "Feature Suggestion"
-        case bug = "Bug Report"
-        case praise = "What I Love"
-        case other = "Other"
-
-        var icon: String {
-            switch self {
-            case .suggestion: return "lightbulb.fill"
-            case .bug: return "ladybug.fill"
-            case .praise: return "heart.fill"
-            case .other: return "ellipsis.bubble.fill"
-            }
-        }
-
-        var color: Color {
-            switch self {
-            case .suggestion: return .yellow
-            case .bug: return .red
-            case .praise: return .pink
-            case .other: return .blue
-            }
-        }
-    }
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                        .font(.system(size: 44))
-                        .foregroundColor(.purple)
+        VStack(spacing: 20) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    .font(.system(size: 44))
+                    .foregroundColor(.green)
 
-                    Text("Send Feedback")
-                        .font(.title2)
-                        .bold()
+                Text("Send Feedback")
+                    .font(.title2)
+                    .bold()
 
-                    Text("We'd love to hear from you! Your feedback helps us make Activslot better for busy professionals like you.")
-                        .foregroundColor(.secondary)
-                }
-
-                Divider()
-
-                // Feedback Type Selection
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("What type of feedback?")
-                        .font(.headline)
-
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        ForEach(FeedbackType.allCases, id: \.self) { type in
-                            Button {
-                                feedbackType = type
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: type.icon)
-                                        .foregroundColor(feedbackType == type ? .white : type.color)
-                                    Text(type.rawValue)
-                                        .font(.caption)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(feedbackType == type ? .white : .primary)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(feedbackType == type ? type.color : Color(.secondarySystemBackground))
-                                .cornerRadius(10)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                // Feedback Text
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Your Feedback")
-                        .font(.headline)
-
-                    TextEditor(text: $feedbackText)
-                        .frame(minHeight: 150)
-                        .padding(8)
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-
-                    Text("\(feedbackText.count) / 1000 characters")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                // Email (optional)
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Email")
-                            .font(.headline)
-                        Text("(optional)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    TextField("your.email@company.com", text: $userEmail)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
-
-                    Text("Add your email if you'd like us to follow up on your feedback")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Divider()
-
-                // Submit Options
-                VStack(spacing: 12) {
-                    // Send via Email
-                    Button {
-                        sendFeedbackViaEmail()
-                    } label: {
-                        HStack {
-                            Image(systemName: "envelope.fill")
-                            Text("Send via Email")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.purple)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                    }
-                    .disabled(feedbackText.isEmpty)
-
-                    // Alternative options
-                    HStack(spacing: 16) {
-                        Button {
-                            openTwitter()
-                        } label: {
-                            HStack {
-                                Image(systemName: "at")
-                                Text("Twitter/X")
-                            }
-                            .font(.subheadline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color(.secondarySystemBackground))
-                            .foregroundColor(.primary)
-                            .cornerRadius(10)
-                        }
-
-                        Button {
-                            openGitHub()
-                        } label: {
-                            HStack {
-                                Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                Text("GitHub")
-                            }
-                            .font(.subheadline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color(.secondarySystemBackground))
-                            .foregroundColor(.primary)
-                            .cornerRadius(10)
-                        }
-                    }
-
-                    Text("Or reach us on social media / GitHub for public discussions")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
+                Text("Tell us what you think. We read every message.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
             }
-            .padding()
+            .padding(.top, 8)
+
+            // Feedback text box
+            TextEditor(text: $feedbackText)
+                .frame(minHeight: 180)
+                .padding(12)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+                .overlay(alignment: .topLeading) {
+                    if feedbackText.isEmpty {
+                        Text("What's on your mind?")
+                            .foregroundColor(.gray.opacity(0.5))
+                            .padding(.top, 20)
+                            .padding(.leading, 16)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+            // Submit button
+            Button {
+                Task { await submitFeedback() }
+            } label: {
+                HStack {
+                    if isSending {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                        Text("Submit Feedback")
+                    }
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(feedbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray : Color.green)
+                .cornerRadius(14)
+            }
+            .disabled(feedbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+
+            Spacer()
         }
+        .padding()
         .navigationTitle("Feedback")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Thank You!", isPresented: $showSuccessAlert) {
-            Button("OK") {
-                dismiss()
-            }
+            Button("OK") { dismiss() }
         } message: {
-            Text("Your feedback has been sent. We appreciate you taking the time to help us improve!")
+            Text("Your feedback has been submitted. We appreciate it!")
+        }
+        .alert("Error", isPresented: $showErrorAlert) {
+            Button("OK") {}
+        } message: {
+            Text(errorMessage)
         }
     }
 
-    private func sendFeedbackViaEmail() {
-        let appVersion = Bundle.main.appVersion
-        let subject = "ActivSlot Feedback: \(feedbackType.rawValue)"
-        let body = """
-        Feedback Type: \(feedbackType.rawValue)
+    private func submitFeedback() async {
+        isSending = true
+        defer { isSending = false }
 
-        \(feedbackText)
+        let container = CKContainer(identifier: "iCloud.com.activslot.healthapp")
+        let publicDB = container.publicCloudDatabase
 
-        ---
-        User Email: \(userEmail.isEmpty ? "Not provided" : userEmail)
-        App Version: \(appVersion)
-        Device: \(UIDevice.current.model)
-        iOS: \(UIDevice.current.systemVersion)
-        """
+        let record = CKRecord(recordType: "Feedback")
+        record["text"] = feedbackText as CKRecordValue
+        record["appVersion"] = Bundle.main.appVersion as CKRecordValue
+        record["device"] = UIDevice.current.model as CKRecordValue
+        record["iosVersion"] = UIDevice.current.systemVersion as CKRecordValue
+        record["timestamp"] = Date() as CKRecordValue
 
-        let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let encodedBody = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-
-        if let url = URL(string: "mailto:support@thunaiapp.com?subject=\(encodedSubject)&body=\(encodedBody)") {
-            UIApplication.shared.open(url)
-        }
-    }
-
-    private func openTwitter() {
-        if let url = URL(string: "https://twitter.com/activslot") {
-            UIApplication.shared.open(url)
-        }
-    }
-
-    private func openGitHub() {
-        if let url = URL(string: "https://github.com/kashinitiatives/ActivSlot/issues") {
-            UIApplication.shared.open(url)
+        do {
+            _ = try await publicDB.save(record)
+            await MainActor.run { showSuccessAlert = true }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Could not submit feedback. Please check your internet connection and try again."
+                showErrorAlert = true
+            }
         }
     }
 }

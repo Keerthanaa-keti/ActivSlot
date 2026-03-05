@@ -84,16 +84,6 @@ struct SmartPlanView: View {
             }
             .navigationTitle("Today's Plan")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        refreshPlan()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .disabled(planner.isAnalyzing)
-                }
-            }
             .refreshable {
                 await refreshPlanAsync()
             }

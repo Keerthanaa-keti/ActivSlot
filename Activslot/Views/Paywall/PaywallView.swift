@@ -22,8 +22,18 @@ struct PaywallView: View {
                 VStack(spacing: 24) {
                     headerSection
                     featureGrid
-                    planSelector
-                    purchaseButton
+
+                    if subscriptionManager.products.isEmpty && !subscriptionManager.isLoading {
+                        // Fallback: use native SubscriptionStoreView
+                        SubscriptionStoreView(groupID: "21574498")
+                            .subscriptionStoreButtonLabel(.multiline)
+                            .storeButton(.visible, for: .restorePurchases)
+                            .frame(minHeight: 300)
+                    } else {
+                        planSelector
+                        purchaseButton
+                    }
+
                     legalLinks
                 }
                 .padding()
@@ -44,8 +54,13 @@ struct PaywallView: View {
                 if subscriptionManager.products.isEmpty {
                     await subscriptionManager.loadProducts()
                 }
-                // Default to annual
                 selectedProduct = subscriptionManager.annualProduct ?? subscriptionManager.products.first
+            }
+            .onInAppPurchaseCompletion { _, result in
+                if case .success(.success(_)) = result {
+                    Task { await subscriptionManager.checkEntitlements() }
+                    dismiss()
+                }
             }
         }
     }
