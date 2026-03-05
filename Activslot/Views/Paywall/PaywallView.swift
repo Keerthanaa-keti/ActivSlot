@@ -23,12 +23,26 @@ struct PaywallView: View {
                     headerSection
                     featureGrid
 
-                    if subscriptionManager.products.isEmpty && !subscriptionManager.isLoading {
-                        // Fallback: use native SubscriptionStoreView
-                        SubscriptionStoreView(groupID: "21574498")
-                            .subscriptionStoreButtonLabel(.multiline)
-                            .storeButton(.visible, for: .restorePurchases)
-                            .frame(minHeight: 300)
+                    if subscriptionManager.isLoading {
+                        ProgressView("Loading plans...")
+                            .padding(40)
+                    } else if subscriptionManager.products.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.title)
+                                .foregroundColor(.orange)
+                            Text("Subscriptions are being set up")
+                                .font(.headline)
+                            Text("Plans will be available soon. Please try again later.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                            Button("Try Again") {
+                                Task { await subscriptionManager.loadProducts() }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .padding(40)
                     } else {
                         planSelector
                         purchaseButton
@@ -56,11 +70,8 @@ struct PaywallView: View {
                 }
                 selectedProduct = subscriptionManager.annualProduct ?? subscriptionManager.products.first
             }
-            .onInAppPurchaseCompletion { _, result in
-                if case .success(.success(_)) = result {
-                    Task { await subscriptionManager.checkEntitlements() }
-                    dismiss()
-                }
+            .onChange(of: subscriptionManager.isProUser) { _, isPro in
+                if isPro { dismiss() }
             }
         }
     }
