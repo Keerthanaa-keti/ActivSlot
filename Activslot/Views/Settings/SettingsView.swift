@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var showOutlookError = false
     @State private var outlookErrorMessage = ""
     @State private var showPaywall = false
+    @State private var showRedeemCode = false
     @State private var versionTapCount = 0
     @State private var showDebugUnlocked = false
     #if DEBUG
@@ -648,6 +649,25 @@ struct SettingsView: View {
                         }
                     }
 
+                    if !subscriptionManager.isProUser {
+                        Button {
+                            showRedeemCode = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "gift.fill")
+                                    .foregroundColor(.orange)
+                                Text("Redeem Gift Code")
+                            }
+                        }
+                    } else if subscriptionManager.giftCodeRedeemed {
+                        HStack {
+                            Image(systemName: "gift.fill")
+                                .foregroundColor(.green)
+                            Text("Gift Code Active")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
                     Button("Reset Onboarding") {
                         showResetConfirmation = true
                     }
@@ -731,6 +751,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
+            }
+            .sheet(isPresented: $showRedeemCode) {
+                RedeemGiftCodeView()
             }
             .alert("Developer Mode", isPresented: $showDebugUnlocked) {
                 Button("OK") {}
