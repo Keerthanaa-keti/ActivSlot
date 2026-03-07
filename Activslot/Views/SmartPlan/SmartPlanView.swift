@@ -1476,54 +1476,24 @@ struct WalkPatternGraphCard: View {
                                         .foregroundColor(.secondary)
                                 }
 
-                                // Bar - yellow/amber for intensity, green border if recommended
+                                // Bar - yellow intensity based on steps
                                 let height: CGFloat = data.averageSteps > 0
-                                    ? max(12, CGFloat(data.averageSteps) / CGFloat(max(maxSteps, 1)) * 80)
-                                    : (data.isRecommended ? 30 : 8)
+                                    ? max(8, CGFloat(data.averageSteps) / CGFloat(max(maxSteps, 1)) * 80)
+                                    : 6
 
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(barColor(for: data))
                                     .frame(width: 24, height: height)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 3)
-                                            .stroke(data.isRecommended ? Color.green : Color.clear, lineWidth: 2)
-                                    )
 
                                 // Hour label
                                 Text(shortHourLabel(data.hour))
                                     .font(.system(size: 8))
-                                    .foregroundColor(data.isRecommended ? .green : .secondary)
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
                     .padding(.vertical, 8)
                 }
-
-                // Legend
-                HStack(spacing: 12) {
-                    HStack(spacing: 4) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.yellow)
-                            .frame(width: 12, height: 8)
-                        Text("Steps")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack(spacing: 4) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.yellow)
-                            .frame(width: 12, height: 8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 2)
-                                    .stroke(Color.green, lineWidth: 1.5)
-                            )
-                        Text("Recommended")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.top, 4)
             }
         }
         .padding()
@@ -1533,13 +1503,11 @@ struct WalkPatternGraphCard: View {
     }
 
     private func barColor(for data: SmartPlannerEngine.HourlyPatternData) -> Color {
-        if data.averageSteps > 0 {
-            // Yellow intensity based on step count
-            let intensity = CGFloat(data.averageSteps) / CGFloat(max(maxSteps, 1))
-            return Color.yellow.opacity(0.4 + intensity * 0.6)
+        if data.averageSteps == 0 {
+            return Color.yellow.opacity(0.15)
         }
-        // No step data: show recommended hours in green, others in light gray
-        return data.isRecommended ? Color.green.opacity(0.4) : Color.gray.opacity(0.25)
+        let intensity = CGFloat(data.averageSteps) / CGFloat(max(maxSteps, 1))
+        return Color.yellow.opacity(0.3 + intensity * 0.7)
     }
 
     private func shortHourLabel(_ hour: Int) -> String {
