@@ -635,8 +635,8 @@ class TestDataManager: ObservableObject {
         createEvent(on: today, calendar: calendar, title: "Customer Demo",       startHour: 14, duration: 45,  attendeeCount: 5)
         createEvent(on: today, calendar: calendar, title: "Engineering Review",  startHour: 16, duration: 60,  attendeeCount: 12)
 
-        // Set 5000 steps (mid-day, realistic)
-        await generateStepScenario(.midDay)
+        // Skip HealthKit steps in simulator to avoid authorization dialog
+        // await generateStepScenario(.midDay)
 
         // Link mock partner (staggered schedule creates clear shared free windows)
         await CoupleWalkManager.shared.linkMockPartner(name: "Alex (test partner)")
@@ -645,6 +645,39 @@ class TestDataManager: ObservableObject {
 
         log("Walk Buddy scenario ready — shared slots should appear around 10am, 12pm–1pm, 4:30pm")
         lastGenerationStatus = "Walk Buddy: 4 meetings + mock partner linked"
+    }
+
+    /// Scenario: Walk Buddy Device B — different meeting schedule from Device A
+    /// Device B (this device): meetings at 8:30am, 10:30am, 1pm, 3:30pm
+    /// Mock partner represents Device A's schedule: meetings at 9am, 11am, 2pm, 4pm
+    func setupWalkBuddyTestScenarioB() async {
+        log("Setting up Walk Buddy test scenario B (Device B)...")
+
+        await clearAllTestData()
+
+        guard let calendar = eventStore.calendars(for: .event).first(where: { $0.allowsContentModifications }) else {
+            log("  No writable calendar found")
+            return
+        }
+
+        let today = Calendar.current.startOfDay(for: Date())
+
+        // Device B schedule: different meetings than Device A
+        createEvent(on: today, calendar: calendar, title: "Team Sync",          startHour: 8,  duration: 30,  attendeeCount: 4)
+        createEvent(on: today, calendar: calendar, title: "Design Review",      startHour: 10, duration: 60,  attendeeCount: 5)
+        createEvent(on: today, calendar: calendar, title: "Lunch & Learn",      startHour: 13, duration: 45,  attendeeCount: 10)
+        createEvent(on: today, calendar: calendar, title: "Sprint Retro",       startHour: 15, duration: 60,  attendeeCount: 7)
+
+        // Link mock partner representing Device A's schedule
+        await CoupleWalkManager.shared.linkMockPartner(
+            name: "Sam (test partner)",
+            schedule: [(9, 30), (11, 60), (14, 45), (16, 60)]
+        )
+
+        await refreshManagers()
+
+        log("Walk Buddy B scenario ready — partner has Device A's meeting schedule")
+        lastGenerationStatus = "Walk Buddy B: 4 meetings + mock partner (Device A schedule)"
     }
 
     // MARK: - Manager Refresh

@@ -85,7 +85,9 @@ class SubscriptionManager: ObservableObject {
         defer { isLoading = false }
 
         do {
+            print("SubscriptionManager: Requesting products: \(Self.allProductIDs)")
             let storeProducts = try await Product.products(for: Self.allProductIDs)
+            print("SubscriptionManager: Loaded \(storeProducts.count) products: \(storeProducts.map { "\($0.id) = \($0.displayPrice)" })")
             // Sort: weekly, monthly, annual
             products = storeProducts.sorted { p1, p2 in
                 let order: [String: Int] = [
@@ -95,11 +97,12 @@ class SubscriptionManager: ObservableObject {
                 ]
                 return (order[p1.id] ?? 99) < (order[p2.id] ?? 99)
             }
+            if storeProducts.isEmpty {
+                errorMessage = "No subscription products found. Product IDs: \(Self.allProductIDs)"
+            }
         } catch {
-            #if DEBUG
             print("SubscriptionManager: Failed to load products: \(error)")
-            #endif
-            errorMessage = "Failed to load subscription options."
+            errorMessage = "Failed to load subscriptions: \(error.localizedDescription)"
         }
     }
 

@@ -37,6 +37,12 @@ struct PaywallView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
+                            if let error = subscriptionManager.errorMessage {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .multilineTextAlignment(.center)
+                            }
                             Button("Try Again") {
                                 Task { await subscriptionManager.loadProducts() }
                             }

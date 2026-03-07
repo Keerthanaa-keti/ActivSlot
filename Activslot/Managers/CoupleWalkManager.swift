@@ -218,69 +218,96 @@ class CoupleWalkManager: ObservableObject {
     ///  5. Rank: by overlap with historical peak activity hours
     ///  6. Return top 3
     func findSharedWalkSlots(date: Date) async -> [SharedWalkSlot] {
-        guard let partner = partnerProfile else { return [] }
+        guard let partner = partnerProfile else {
+            return []
+        }
 
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return [] }
 
-        // 1. Get own free slots from the movement plan
+        // 1. Get own busy blocks from calendar
         let ownBusyBlocks = await computeBusyBlocks(for: date)
 
-        // 2. Compute own free slots (gaps between busy blocks within active hours)
+        // 2. Compute own free slots using FULL active hours (not just walk preference)
+        // Walk Buddy should consider all reasonable hours, not just the user's solo walk preference
         let myPrefs = userPreferences
+        let activeStartHour = myPrefs.wakeTime.hour + 1
+        let activeEndHour = myPrefs.sleepTime.hour - 1
         let ownFreeSlots = computeFreeSlots(
             busyBlocks: ownBusyBlocks,
             dayStart: startOfDay,
             dayEnd: endOfDay,
-            walkStartHour: walkTimeWindow().start,
-            walkEndHour: walkTimeWindow().end
+            walkStartHour: activeStartHour,
+            walkEndHour: activeEndHour
         )
+        #if DEBUG
+        NSLog("WalkBuddy: Own busy=\(ownBusyBlocks.count), free=\(ownFreeSlots.count) (hours \(activeStartHour)-\(activeEndHour))")
+        #endif
 
         // 3. Partner's busy blocks for this date
         let partnerBusyToday = partner.freeBusyBlocks.filter { block in
             let blockDate = calendar.startOfDay(for: block.start)
             return calendar.isDate(blockDate, inSameDayAs: date)
         }
+        #if DEBUG
+        NSLog("WalkBuddy: Partner busy today: \(partnerBusyToday.count)")
+        #endif
 
-        // 4. Find slots where partner is also free
+        // 4. Subtract partner's busy blocks from own free slots to get truly shared free time
         let minDuration: TimeInterval = 20 * 60 // 20 minutes minimum
-
         var sharedSlots: [SharedWalkSlot] = []
 
         for ownSlot in ownFreeSlots {
-            // Check that this slot doesn't overlap with any partner busy block
-            let partnerIsFree = !partnerBusyToday.contains { busy in
-                ownSlot.start < busy.end && ownSlot.end > busy.start
+            // Split this free slot around partner's busy blocks
+            var fragments: [DateInterval] = [ownSlot]
+
+            for busy in partnerBusyToday {
+                var newFragments: [DateInterval] = []
+                for fragment in fragments {
+                    // If no overlap, keep the fragment as-is
+                    if fragment.end <= busy.start || fragment.start >= busy.end {
+                        newFragments.append(fragment)
+                    } else {
+                        // Split: keep the part before the busy block
+                        if fragment.start < busy.start {
+                            newFragments.append(DateInterval(start: fragment.start, end: busy.start))
+                        }
+                        // Keep the part after the busy block
+                        if fragment.end > busy.end {
+                            newFragments.append(DateInterval(start: busy.end, end: fragment.end))
+                        }
+                    }
+                }
+                fragments = newFragments
             }
-            guard partnerIsFree else { continue }
 
-            // Check slot falls within BOTH partners' preferred walk windows
-            let slotHour = calendar.component(.hour, from: ownSlot.start)
-            let inOwnWindow = slotHour >= myPrefs.wakeTime.hour + 1 && slotHour < myPrefs.sleepTime.hour - 1
-            let inPartnerWindow = slotHour >= partner.preferredWalkStartHour && slotHour < partner.preferredWalkEndHour
-            guard inOwnWindow && inPartnerWindow else { continue }
+            // Filter fragments within partner's walk window and by minimum duration
+            for fragment in fragments {
+                let slotHour = calendar.component(.hour, from: fragment.start)
+                let inPartnerWindow = slotHour >= partner.preferredWalkStartHour && slotHour < partner.preferredWalkEndHour
+                guard inPartnerWindow else { continue }
+                guard fragment.duration >= minDuration else { continue }
 
-            // Ensure minimum duration
-            guard ownSlot.duration >= minDuration else { continue }
+                let suggestedDuration = min(Int(fragment.duration / 60), 60)
 
-            // Cap slot at 60 minutes for suggestions
-            let suggestedDuration = min(Int(ownSlot.duration / 60), 60)
+                // Confidence: higher if in both partners' ideal walk windows
+                let walkWindow = walkTimeWindow()
+                let inOwnIdeal = slotHour >= walkWindow.start && slotHour < walkWindow.end
+                let confidence = inOwnIdeal ? 0.9 : 0.6
 
-            // Confidence: higher if slot is in both partners' ideal windows
-            let idealStart = max(walkTimeWindow().start, partner.preferredWalkStartHour)
-            let idealEnd = min(walkTimeWindow().end, partner.preferredWalkEndHour)
-            let inIdeal = slotHour >= idealStart && slotHour < idealEnd
-            let confidence = inIdeal ? 0.9 : 0.6
-
-            sharedSlots.append(SharedWalkSlot(
-                startTime: ownSlot.start,
-                duration: suggestedDuration,
-                confidenceScore: confidence
-            ))
+                sharedSlots.append(SharedWalkSlot(
+                    startTime: fragment.start,
+                    duration: suggestedDuration,
+                    confidenceScore: confidence
+                ))
+            }
         }
 
         // 5. Sort by confidence, then by time
+        #if DEBUG
+        NSLog("WalkBuddy: Found \(sharedSlots.count) shared slots")
+        #endif
         return Array(
             sharedSlots
                 .sorted { $0.confidenceScore > $1.confidenceScore || ($0.confidenceScore == $1.confidenceScore && $0.startTime < $1.startTime) }

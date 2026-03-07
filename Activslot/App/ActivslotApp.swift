@@ -56,6 +56,7 @@ struct ActivslotApp: App {
             case ("test", "sarah"):        await TestDataManager.shared.setupSarahScenario()
             case ("test", "alex"):         await TestDataManager.shared.setupAlexScenario()
             case ("test", "walk_buddy"):   await TestDataManager.shared.setupWalkBuddyTestScenario()
+            case ("test", "walk_buddy_b"): await TestDataManager.shared.setupWalkBuddyTestScenarioB()
             case ("test", "busy"):         await TestDataManager.shared.setupBusyExecutiveScenario()
             case ("test", "light"):        await TestDataManager.shared.setupLightDayScenario()
             case ("test", "almost_goal"):  await TestDataManager.shared.setupAlmostThereScenario()
@@ -86,6 +87,10 @@ struct ActivslotApp: App {
                 await NotificationManager.shared.scheduleBehindOnStepsNotification(
                     deficit: 3000, suggestedSlot: nil)
                 print("DEBUG: Behind-on-steps notification scheduled")
+
+            case ("navigate", "walk_buddy"):
+                NotificationCenter.default.post(name: .openWalkBuddy, object: nil)
+                print("DEBUG: Navigating to Walk Buddy")
 
             default:
                 print("DEBUG URL: unknown route activslot://\(host)/\(segment)")
@@ -503,4 +508,5 @@ extension Notification.Name {
     static let startWorkoutSession = Notification.Name("startWorkoutSession")
     static let openSmartPlan = Notification.Name("openSmartPlan")
     static let addCatchUpWalk = Notification.Name("addCatchUpWalk")
+    static let openWalkBuddy = Notification.Name("openWalkBuddy")
 }
