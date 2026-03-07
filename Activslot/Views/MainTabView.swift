@@ -3,6 +3,7 @@ import SwiftUI
 struct MainTabView: View {
     @State private var selectedTab: Int
     @State private var calendarTodayTapCount = 0
+    @State private var showTomorrow = false
 
     init() {
         #if DEBUG
@@ -21,7 +22,7 @@ struct MainTabView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
-                SmartPlanView()
+                SmartPlanView(showTomorrow: showTomorrow)
                     .tabItem {
                         Label("My Plan", systemImage: "list.bullet.clipboard")
                     }
@@ -64,13 +65,18 @@ struct MainTabView: View {
             UITabBar.appearance().standardAppearance = appearance
             UITabBar.appearance().scrollEdgeAppearance = appearance
         }
-        #if DEBUG
         .onReceive(NotificationCenter.default.publisher(for: .switchTab)) { notification in
             if let index = notification.userInfo?["index"] as? Int {
                 selectedTab = index
             }
         }
-        #endif
+        .onReceive(NotificationCenter.default.publisher(for: .openDayPlan)) { _ in
+            selectedTab = 0
+            showTomorrow = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openSmartPlan)) { _ in
+            selectedTab = 0
+        }
     }
 }
 

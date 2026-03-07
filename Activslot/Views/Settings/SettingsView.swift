@@ -235,35 +235,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    // Export to calendar (Pro)
-                    if subscriptionManager.isProUser {
-                        NavigationLink {
-                            CalendarSyncSettingsView()
-                        } label: {
-                            HStack {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 28)
-                                Text("Export Walks to Calendar")
-                                    .font(.subheadline)
-                            }
-                        }
-                    } else {
-                        Button {
-                            showPaywall = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 28)
-                                Text("Export Walks to Calendar")
-                                    .font(.subheadline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                ProBadge()
-                            }
-                        }
-                    }
                 } header: {
                     Text("Calendar")
                 } footer: {
@@ -368,72 +339,7 @@ struct SettingsView: View {
                     }
                 }
 
-                // Smart Planning
-                Section {
-                    NavigationLink {
-                        SmartPlanningSettingsView()
-                            .environmentObject(userPreferences)
-                            .environmentObject(calendarManager)
-                    } label: {
-                        HStack {
-                            Image(systemName: "brain.head.profile")
-                                .foregroundColor(.green)
-                                .frame(width: 28)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Smart Planning")
-                                    .foregroundColor(.primary)
-                                Text("Goal-based daily plans")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Text("\(userPreferences.dailyStepGoal.formatted()) steps")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                } header: {
-                    Text("Intelligent Planning")
-                } footer: {
-                    Text("The app learns your patterns and creates personalized plans to hit your step goal.")
-                }
 
-                // Your Journey / Identity
-                Section {
-                    NavigationLink {
-                        IdentityProfileView()
-                            .environmentObject(userPreferences)
-                    } label: {
-                        HStack {
-                            Image(systemName: userPreferences.identityLevel.icon)
-                                .foregroundColor(.purple)
-                                .frame(width: 28)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Your Journey")
-                                    .foregroundColor(.primary)
-                                Text(userPreferences.identityLevel.title)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            if userPreferences.currentStreak > 0 {
-                                HStack(spacing: 4) {
-                                    Text("\(userPreferences.currentStreak)")
-                                        .font(.caption)
-                                        .fontWeight(.bold)
-                                    Image(systemName: "flame.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.orange)
-                                }
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Progress")
-                } footer: {
-                    let total = userPreferences.totalWalksCompleted + userPreferences.totalWorkoutsCompleted
-                    Text("\(total) total activities completed")
-                }
 
                 // Notifications
                 Section {

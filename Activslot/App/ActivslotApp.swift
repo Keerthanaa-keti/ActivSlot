@@ -27,6 +27,10 @@ struct ActivslotApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     handleScenePhaseChange(newPhase)
                 }
+                .task {
+                    // Initial sync on launch (scenePhase onChange doesn't fire on first launch)
+                    handleScenePhaseChange(.active)
+                }
                 #if DEBUG
                 .task {
                     await runDebugTestScenarioIfRequested()

@@ -58,8 +58,21 @@ struct OnboardingContainerView: View {
         // Mark onboarding complete
         hasCompletedOnboarding = true
 
-        // Schedule notifications
+        // Auto-enable calendar sync so walks appear in user's calendar
+        CalendarSyncService.shared.autoSyncEnabled = true
+        UserPreferences.shared.smartPlanAutoSyncEnabled = true
+
+        // Auto-select default calendar for walk sync if none set
         Task {
+            let calendarManager = CalendarManager.shared
+            if calendarManager.isAuthorized {
+                // Pick the default calendar for events
+                let calendars = calendarManager.availableCalendars
+                if let defaultCalendar = calendars.first(where: { $0.allowsModifications }) {
+                    UserPreferences.shared.smartPlanCalendarID = defaultCalendar.calendarIdentifier
+                }
+            }
+
             let notificationManager = NotificationManager.shared
             if notificationManager.isAuthorized {
                 // Schedule first evening briefing

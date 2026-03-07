@@ -3,91 +3,55 @@ import SwiftUI
 struct SmartPlanView: View {
     @EnvironmentObject var userPreferences: UserPreferences
     @StateObject private var planner = SmartPlannerEngine.shared
+    var showTomorrow: Bool = false
 
-    @State private var selectedDate = Date()
+    @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var isRefreshing = false
     @State private var showingActivityDetail: SmartPlannerEngine.PlannedActivity?
     @State private var showingWalkableMeetings = false
     @State private var todayEvents: [CalendarEvent] = []
     @State private var showTimeline = true
+    @State private var tomorrowPlan: SmartPlannerEngine.DailyMovementPlan?
+    @State private var tomorrowEvents: [CalendarEvent] = []
+
+    private var isToday: Bool {
+        Calendar.current.isDateInToday(selectedDate)
+    }
+
+    private var isTomorrow: Bool {
+        Calendar.current.isDateInTomorrow(selectedDate)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Step Goal Progress Card
-                    if let plan = planner.currentDayPlan {
-                        SmartStepProgressCard(plan: plan)
+                    // Day Picker: Today / Tomorrow
+                    Picker("Day", selection: $selectedDate) {
+                        Text("Today").tag(Calendar.current.startOfDay(for: Date()))
+                        Text("Tomorrow").tag(Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!))
                     }
+                    .pickerStyle(.segmented)
 
-                    // Checkpoint Progress Bar
-                    CheckpointProgressCard(
-                        currentSteps: planner.currentDayPlan?.estimatedCurrentSteps ?? 0,
-                        goalSteps: userPreferences.dailyStepGoal
-                    )
-
-                    // Walk Pattern Graph - shows user's typical activity for this day of week
-                    let patternData = planner.getHourlyPatternData(for: selectedDate)
-                    let explanation = planner.getPatternExplanation(for: selectedDate)
-                    let dayName = Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: selectedDate) - 1]
-
-                    if !patternData.isEmpty {
-                        WalkPatternGraphCard(
-                            patternData: patternData,
-                            explanation: explanation,
-                            dayName: dayName
-                        )
-                        .premiumGated(.insights)
-                    }
-
-                    // Day Timeline (Visual Overview)
-                    if let plan = planner.currentDayPlan, !todayEvents.isEmpty {
-                        DayTimelineView(plan: plan, events: todayEvents)
-                            .environmentObject(userPreferences)
-                            .premiumGated(.insights)
-                    }
-
-                    // Today's Plan
-                    if let plan = planner.currentDayPlan {
-                        DailyPlanSection(
-                            plan: plan,
-                            onActivityTap: { activity in
-                                showingActivityDetail = activity
-                            },
-                            onComplete: { activity in
-                                planner.recordActivityCompleted(activity.id)
-                                refreshPlan()
-                            },
-                            onSkip: { activity in
-                                planner.recordActivitySkipped(activity.id)
-                                refreshPlan()
-                            }
-                        )
-
-                        // Walkable Meetings
-                        if !plan.walkableMeetings.isEmpty {
-                            WalkableMeetingsSection(meetings: plan.walkableMeetings)
-                        }
-
-                        // Why This Plan - Explanation of AI decisions
-                        WhyThisPlanCard(plan: plan, patterns: planner.userPatterns)
-                            .premiumGated(.insights)
-
-                        // Plan Insights
-                        PlanInsightsCard(plan: plan, patterns: planner.userPatterns)
-                            .premiumGated(.insights)
+                    if isToday {
+                        // MARK: - Today's Plan
+                        todayPlanContent
                     } else {
-                        LoadingPlanView()
+                        // MARK: - Tomorrow's Plan
+                        tomorrowPlanContent
                     }
                 }
                 .padding()
             }
-            .navigationTitle("Today's Plan")
+            .navigationTitle(isToday ? "Today's Plan" : "Tomorrow's Plan")
             .navigationBarTitleDisplayMode(.large)
             .refreshable {
                 await refreshPlanAsync()
             }
             .task {
+                if showTomorrow {
+                    selectedDate = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+                }
                 await initialLoad()
             }
             .sheet(item: $showingActivityDetail) { activity in
@@ -100,6 +64,122 @@ struct SmartPlanView: View {
                     }
                 )
             }
+        }
+    }
+
+    // MARK: - Today's Plan Content
+
+    @ViewBuilder
+    private var todayPlanContent: some View {
+        // Step Goal Progress Card
+        if let plan = planner.currentDayPlan {
+            SmartStepProgressCard(plan: plan)
+        }
+
+        // Checkpoint Progress Bar
+        CheckpointProgressCard(
+            currentSteps: planner.currentDayPlan?.estimatedCurrentSteps ?? 0,
+            goalSteps: userPreferences.dailyStepGoal
+        )
+
+        // Walk Pattern Graph
+        let patternData = planner.getHourlyPatternData(for: selectedDate)
+        let explanation = planner.getPatternExplanation(for: selectedDate)
+        let dayName = Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: selectedDate) - 1]
+
+        if !patternData.isEmpty {
+            WalkPatternGraphCard(
+                patternData: patternData,
+                explanation: explanation,
+                dayName: dayName
+            )
+            .premiumGated(.insights)
+        }
+
+        // Day Timeline
+        if let plan = planner.currentDayPlan, !todayEvents.isEmpty {
+            DayTimelineView(plan: plan, events: todayEvents)
+                .environmentObject(userPreferences)
+                .premiumGated(.insights)
+        }
+
+        // Daily Plan
+        if let plan = planner.currentDayPlan {
+            DailyPlanSection(
+                plan: plan,
+                onActivityTap: { activity in
+                    showingActivityDetail = activity
+                },
+                onComplete: { activity in
+                    planner.recordActivityCompleted(activity.id)
+                    refreshPlan()
+                },
+                onSkip: { activity in
+                    planner.recordActivitySkipped(activity.id)
+                    refreshPlan()
+                }
+            )
+
+            if !plan.walkableMeetings.isEmpty {
+                WalkableMeetingsSection(meetings: plan.walkableMeetings)
+            }
+
+            WhyThisPlanCard(plan: plan, patterns: planner.userPatterns)
+                .premiumGated(.insights)
+
+            PlanInsightsCard(plan: plan, patterns: planner.userPatterns)
+                .premiumGated(.insights)
+        } else {
+            LoadingPlanView()
+        }
+    }
+
+    // MARK: - Tomorrow's Plan Content
+
+    @ViewBuilder
+    private var tomorrowPlanContent: some View {
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+
+        // Walk Pattern Graph for tomorrow's day of week
+        let patternData = planner.getHourlyPatternData(for: tomorrow)
+        let explanation = planner.getPatternExplanation(for: tomorrow)
+        let dayName = Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: tomorrow) - 1]
+
+        if !patternData.isEmpty {
+            WalkPatternGraphCard(
+                patternData: patternData,
+                explanation: explanation,
+                dayName: dayName
+            )
+            .premiumGated(.insights)
+        }
+
+        // Day Timeline for tomorrow
+        if let plan = tomorrowPlan, !tomorrowEvents.isEmpty {
+            DayTimelineView(plan: plan, events: tomorrowEvents)
+                .environmentObject(userPreferences)
+                .premiumGated(.insights)
+        }
+
+        // Tomorrow's Plan
+        if let plan = tomorrowPlan {
+            DailyPlanSection(
+                plan: plan,
+                onActivityTap: { activity in
+                    showingActivityDetail = activity
+                },
+                onComplete: { _ in },
+                onSkip: { _ in }
+            )
+
+            if !plan.walkableMeetings.isEmpty {
+                WalkableMeetingsSection(meetings: plan.walkableMeetings)
+            }
+
+            WhyThisPlanCard(plan: plan, patterns: planner.userPatterns)
+                .premiumGated(.insights)
+        } else {
+            LoadingPlanView()
         }
     }
 
@@ -122,13 +202,28 @@ struct SmartPlanView: View {
         }
         #endif
 
-        // Fetch today's events for timeline
+        // Fetch today's events
         if let events = try? await calendarManager.fetchEvents(for: Date()) {
             await MainActor.run {
                 todayEvents = events
             }
         }
 
+        // Generate today's plan
+        _ = await planner.generateDailyPlan(for: Date())
+
+        // Pre-load tomorrow's plan and events
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let plan = await planner.generateDailyPlan(for: tomorrow)
+        if let events = try? await calendarManager.fetchEvents(for: tomorrow) {
+            await MainActor.run {
+                tomorrowEvents = events
+            }
+        }
+        await MainActor.run {
+            tomorrowPlan = plan
+            // Restore currentDayPlan to today since generateDailyPlan overwrites it
+        }
         _ = await planner.generateDailyPlan(for: Date())
     }
 
@@ -139,13 +234,21 @@ struct SmartPlanView: View {
     }
 
     private func refreshPlanAsync() async {
-        // Refresh events for timeline
-        if let events = try? await CalendarManager.shared.fetchEvents(for: selectedDate) {
-            await MainActor.run {
-                todayEvents = events
+        if isToday {
+            if let events = try? await CalendarManager.shared.fetchEvents(for: Date()) {
+                await MainActor.run { todayEvents = events }
             }
+            _ = await planner.generateDailyPlan(for: Date())
+        } else {
+            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+            let plan = await planner.generateDailyPlan(for: tomorrow)
+            if let events = try? await CalendarManager.shared.fetchEvents(for: tomorrow) {
+                await MainActor.run { tomorrowEvents = events }
+            }
+            await MainActor.run { tomorrowPlan = plan }
+            // Restore today's plan
+            _ = await planner.generateDailyPlan(for: Date())
         }
-        _ = await planner.generateDailyPlan(for: selectedDate)
     }
 }
 

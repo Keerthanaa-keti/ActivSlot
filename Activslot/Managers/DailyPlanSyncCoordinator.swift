@@ -82,7 +82,6 @@ class DailyPlanSyncCoordinator: ObservableObject {
     func syncTomorrowPlan() async {
         let prefs = UserPreferences.shared
         guard prefs.smartPlanAutoSyncEnabled else { return }
-        guard await SubscriptionManager.shared.isProUser else { return }
 
         guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) else { return }
         await generateAndSync(for: tomorrow, optimizationType: .initial)
@@ -106,11 +105,21 @@ class DailyPlanSyncCoordinator: ObservableObject {
     /// Called when app becomes active - checks if re-optimization is needed
     func optimizeIfNeeded() async {
         let prefs = UserPreferences.shared
-        guard prefs.smartPlanAutoSyncEnabled else { return }
+        guard prefs.smartPlanAutoSyncEnabled else {
+            #if DEBUG
+            print("DailyPlanSyncCoordinator: optimizeIfNeeded skipped - autoSync disabled")
+            #endif
+            return
+        }
 
         // Only optimize during active hours
         let hour = Calendar.current.component(.hour, from: Date())
-        guard hour >= prefs.wakeTime.hour && hour < prefs.sleepTime.hour else { return }
+        guard hour >= prefs.wakeTime.hour && hour < prefs.sleepTime.hour else {
+            #if DEBUG
+            print("DailyPlanSyncCoordinator: optimizeIfNeeded skipped - outside active hours (hour=\(hour), wake=\(prefs.wakeTime.hour), sleep=\(prefs.sleepTime.hour))")
+            #endif
+            return
+        }
 
         // Check cooldown
         if let lastTime = lastOptimizationTime,
@@ -298,12 +307,18 @@ class DailyPlanSyncCoordinator: ObservableObject {
 
         // Check calendar permission
         guard calendarManager.isAuthorized else {
+            #if DEBUG
+            print("DailyPlanSyncCoordinator: validatePrerequisites FAILED - calendar not authorized")
+            #endif
             Task { @MainActor in syncErrors.append(.calendarPermissionDenied) }
             return false
         }
 
         // Check calendar selected
         guard !prefs.smartPlanCalendarID.isEmpty else {
+            #if DEBUG
+            print("DailyPlanSyncCoordinator: validatePrerequisites FAILED - no calendar selected")
+            #endif
             Task { @MainActor in syncErrors.append(.noCalendarSelected) }
             return false
         }
@@ -311,14 +326,19 @@ class DailyPlanSyncCoordinator: ObservableObject {
         // Check calendar exists
         let calendars = eventStore.calendars(for: .event)
         guard calendars.contains(where: { $0.calendarIdentifier == prefs.smartPlanCalendarID }) else {
+            #if DEBUG
+            print("DailyPlanSyncCoordinator: validatePrerequisites FAILED - calendar \(prefs.smartPlanCalendarID) not found in \(calendars.map { $0.calendarIdentifier })")
+            #endif
             Task { @MainActor in
                 syncErrors.append(.calendarNotFound)
-                // Clear invalid selection
                 UserPreferences.shared.smartPlanCalendarID = ""
             }
             return false
         }
 
+        #if DEBUG
+        print("DailyPlanSyncCoordinator: validatePrerequisites PASSED")
+        #endif
         return true
     }
 
