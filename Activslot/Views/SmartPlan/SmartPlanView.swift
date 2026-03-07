@@ -1477,9 +1477,9 @@ struct WalkPatternGraphCard: View {
                                 }
 
                                 // Bar - yellow/amber for intensity, green border if recommended
-                                let height = maxSteps > 0
-                                    ? max(4, CGFloat(data.averageSteps) / CGFloat(maxSteps) * 80)
-                                    : 4
+                                let height: CGFloat = data.averageSteps > 0
+                                    ? max(12, CGFloat(data.averageSteps) / CGFloat(max(maxSteps, 1)) * 80)
+                                    : (data.isRecommended ? 30 : 8)
 
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(barColor(for: data))
@@ -1533,12 +1533,13 @@ struct WalkPatternGraphCard: View {
     }
 
     private func barColor(for data: SmartPlannerEngine.HourlyPatternData) -> Color {
-        if data.averageSteps == 0 {
-            return Color.gray.opacity(0.15)
+        if data.averageSteps > 0 {
+            // Yellow intensity based on step count
+            let intensity = CGFloat(data.averageSteps) / CGFloat(max(maxSteps, 1))
+            return Color.yellow.opacity(0.4 + intensity * 0.6)
         }
-        // Yellow to orange gradient based on intensity
-        let intensity = CGFloat(data.averageSteps) / CGFloat(max(maxSteps, 1))
-        return Color.yellow.opacity(0.4 + intensity * 0.6)
+        // No step data: show recommended hours in green, others in light gray
+        return data.isRecommended ? Color.green.opacity(0.4) : Color.gray.opacity(0.25)
     }
 
     private func shortHourLabel(_ hour: Int) -> String {
