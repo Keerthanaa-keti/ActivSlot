@@ -1485,10 +1485,16 @@ struct WalkPatternGraphCard: View {
                                     .fill(barColor(for: data))
                                     .frame(width: 24, height: height)
 
+                                // Green line under recommended hours
+                                Rectangle()
+                                    .fill(data.isRecommended ? Color.green : Color.clear)
+                                    .frame(width: 24, height: 2)
+                                    .clipShape(RoundedRectangle(cornerRadius: 1))
+
                                 // Hour label
                                 Text(shortHourLabel(data.hour))
                                     .font(.system(size: 8))
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(data.isRecommended ? .green : .secondary)
                             }
                         }
                     }
