@@ -92,6 +92,18 @@ struct ActivslotApp: App {
                 NotificationCenter.default.post(name: .openWalkBuddy, object: nil)
                 print("DEBUG: Navigating to Walk Buddy")
 
+            case ("navigate", "tab"):
+                // activslot://navigate/tab?index=0|1|2
+                if let query = url.query, let idx = Int(query.replacingOccurrences(of: "index=", with: "")) {
+                    NotificationCenter.default.post(name: .switchTab, object: nil, userInfo: ["index": idx])
+                }
+
+            case ("navigate", "dismiss"):
+                NotificationCenter.default.post(name: .dismissSheet, object: nil)
+
+            case ("navigate", "paywall"):
+                NotificationCenter.default.post(name: .openPaywall, object: nil)
+
             default:
                 print("DEBUG URL: unknown route activslot://\(host)/\(segment)")
             }
@@ -509,4 +521,7 @@ extension Notification.Name {
     static let openSmartPlan = Notification.Name("openSmartPlan")
     static let addCatchUpWalk = Notification.Name("addCatchUpWalk")
     static let openWalkBuddy = Notification.Name("openWalkBuddy")
+    static let switchTab = Notification.Name("switchTab")
+    static let dismissSheet = Notification.Name("dismissSheet")
+    static let openPaywall = Notification.Name("openPaywall")
 }

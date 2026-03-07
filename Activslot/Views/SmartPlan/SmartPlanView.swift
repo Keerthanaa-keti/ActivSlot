@@ -1436,101 +1436,109 @@ struct WalkPatternGraphCard: View {
     let explanation: String
     let dayName: String
 
-    @State private var isExpanded = false
-
     private var maxSteps: Int {
         patternData.map(\.averageSteps).max() ?? 1000
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header with expand/collapse
-            Button {
-                withAnimation(.spring(response: 0.3)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack {
-                    Image(systemName: "chart.bar.fill")
-                        .foregroundColor(.blue)
-                    Text("Your \(dayName) Pattern")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    Spacer()
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                }
+            // Header
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .foregroundColor(.orange)
+                Text("Your \(dayName) Pattern")
+                    .font(.headline)
+                Spacer()
             }
-            .buttonStyle(.plain)
 
-            // Explanation text (always visible)
+            // Explanation text
             Text(explanation)
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if isExpanded {
-                // Bar graph
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Typical activity by hour")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.bottom, 4)
+            // Bar graph - always visible
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Steps by hour")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.bottom, 4)
 
-                    // Scrollable horizontal bar chart
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .bottom, spacing: 4) {
-                            ForEach(patternData) { data in
-                                VStack(spacing: 2) {
-                                    // Bar
-                                    let height = maxSteps > 0
-                                        ? max(4, CGFloat(data.averageSteps) / CGFloat(maxSteps) * 60)
-                                        : 4
-
-                                    RoundedRectangle(cornerRadius: 2)
-                                        .fill(data.isRecommended ? Color.green : Color.gray.opacity(0.3))
-                                        .frame(width: 20, height: height)
-
-                                    // Hour label
-                                    Text(shortHourLabel(data.hour))
-                                        .font(.system(size: 8))
-                                        .foregroundColor(data.isRecommended ? .green : .secondary)
+                // Scrollable horizontal bar chart
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .bottom, spacing: 4) {
+                        ForEach(patternData) { data in
+                            VStack(spacing: 2) {
+                                // Step count on top of bar
+                                if data.averageSteps > 0 {
+                                    Text("\(data.averageSteps)")
+                                        .font(.system(size: 7))
+                                        .foregroundColor(.secondary)
                                 }
+
+                                // Bar - yellow/amber for intensity, green border if recommended
+                                let height = maxSteps > 0
+                                    ? max(4, CGFloat(data.averageSteps) / CGFloat(maxSteps) * 80)
+                                    : 4
+
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(barColor(for: data))
+                                    .frame(width: 24, height: height)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .stroke(data.isRecommended ? Color.green : Color.clear, lineWidth: 2)
+                                    )
+
+                                // Hour label
+                                Text(shortHourLabel(data.hour))
+                                    .font(.system(size: 8))
+                                    .foregroundColor(data.isRecommended ? .green : .secondary)
                             }
                         }
-                        .padding(.vertical, 8)
                     }
-
-                    // Legend
-                    HStack(spacing: 16) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 8, height: 8)
-                            Text("Recommended")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 8, height: 8)
-                            Text("Outside preference")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.top, 4)
+                    .padding(.vertical, 8)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+
+                // Legend
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.yellow)
+                            .frame(width: 12, height: 8)
+                        Text("Steps")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.yellow)
+                            .frame(width: 12, height: 8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 2)
+                                    .stroke(Color.green, lineWidth: 1.5)
+                            )
+                        Text("Recommended")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.top, 4)
             }
         }
         .padding()
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
+    }
+
+    private func barColor(for data: SmartPlannerEngine.HourlyPatternData) -> Color {
+        if data.averageSteps == 0 {
+            return Color.gray.opacity(0.15)
+        }
+        // Yellow to orange gradient based on intensity
+        let intensity = CGFloat(data.averageSteps) / CGFloat(max(maxSteps, 1))
+        return Color.yellow.opacity(0.4 + intensity * 0.6)
     }
 
     private func shortHourLabel(_ hour: Int) -> String {

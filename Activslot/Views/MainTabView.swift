@@ -64,6 +64,13 @@ struct MainTabView: View {
             UITabBar.appearance().standardAppearance = appearance
             UITabBar.appearance().scrollEdgeAppearance = appearance
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .switchTab)) { notification in
+            if let index = notification.userInfo?["index"] as? Int {
+                selectedTab = index
+            }
+        }
+        #endif
     }
 }
 
