@@ -1,10 +1,13 @@
 import SwiftUI
 
 // MARK: - Onboarding Container
-// Streamlined 3-step onboarding based on Hooked framework:
+// Streamlined onboarding based on Hooked framework:
 // 1. Hook (Value Proposition) - Show the promise
-// 2. Enable (Permissions) - Get necessary access
-// 3. Reward (Smart Planner) - Deliver immediate value
+// 2. Enable (Permissions) - Get Health & Calendar access
+// 3. Calendar (Connect work calendar)
+// 4. Notifications - Enable smart alerts
+// 5. Walk Buddy - Connect a partner (optional)
+// 6. Reward (Smart Planner) - Deliver immediate value
 
 struct OnboardingContainerView: View {
     @StateObject private var userPreferences = UserPreferences.shared
@@ -15,7 +18,7 @@ struct OnboardingContainerView: View {
     @State private var currentPage = 0
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
-    private let totalPages = 4
+    private let totalPages = 6
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,13 +38,21 @@ struct OnboardingContainerView: View {
                 CalendarConnectionGuideView(onContinue: { currentPage = 3 })
                     .tag(2)
 
-                // Step 4: Reward - Show immediate value with their data
+                // Step 4: Notifications - Enable smart alerts
+                NotificationsOnboardingView(onContinue: { currentPage = 4 })
+                    .tag(3)
+
+                // Step 5: Walk Buddy - Connect a partner
+                WalkBuddyOnboardingView(onContinue: { currentPage = 5 })
+                    .tag(4)
+
+                // Step 6: Reward - Show immediate value with their data
                 SmartPlannerIntroView(onContinue: {
                     completeOnboarding()
                 })
                 .environmentObject(userPreferences)
                 .environmentObject(calendarManager)
-                .tag(3)
+                .tag(5)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut, value: currentPage)

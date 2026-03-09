@@ -48,6 +48,8 @@
 		LEGAL0000001 /* LegalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = LEGAL0000011 /* LegalViews.swift */; };
 		DPSYN0000001 /* DailyPlanSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DPSYN0000011 /* DailyPlanSyncCoordinator.swift */; };
 		SMINT0000001 /* SmartPlannerIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMINT0000011 /* SmartPlannerIntroView.swift */; };
+		0C4396C9137D48E48F5BDC9D /* NotificationsOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9124590800644BEB4D04436 /* NotificationsOnboardingView.swift */; };
+		004E8EF3FE334175935A4249 /* WalkBuddyOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F9EB055625D4FD1AB76FE12 /* WalkBuddyOnboardingView.swift */; };
 		PARTP0000001 /* PartnerProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = PARTP0000011 /* PartnerProfile.swift */; };
 		CWMGR0000001 /* CoupleWalkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CWMGR0000011 /* CoupleWalkManager.swift */; };
 		CWVEW0000001 /* CoupleWalkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CWVEW0000011 /* CoupleWalkView.swift */; };
@@ -90,6 +92,8 @@
 		72C94296FFFF0001CAFBCC /* AutopilotManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutopilotManager.swift; sourceTree = "<group>"; };
 		72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalWhyView.swift; sourceTree = "<group>"; };
 		SMINT0000011 /* SmartPlannerIntroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlannerIntroView.swift; sourceTree = "<group>"; };
+		A9124590800644BEB4D04436 /* NotificationsOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsOnboardingView.swift; sourceTree = "<group>"; };
+		9F9EB055625D4FD1AB76FE12 /* WalkBuddyOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkBuddyOnboardingView.swift; sourceTree = "<group>"; };
 		72C9429AFFFF0003CAFBCC /* IdentityProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityProfileView.swift; sourceTree = "<group>"; };
 		72C9429CFFFF0004CAFBCC /* AutopilotSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutopilotSettingsView.swift; sourceTree = "<group>"; };
 		72C9429EAAAA0001CAFBCC /* SmartPlannerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPlannerEngine.swift; sourceTree = "<group>"; };
@@ -258,6 +262,8 @@
 				001A00019 /* PreferencesView.swift */,
 				72C94298FFFF0002CAFBCC /* PersonalWhyView.swift */,
 				SMINT0000011 /* SmartPlannerIntroView.swift */,
+				A9124590800644BEB4D04436 /* NotificationsOnboardingView.swift */,
+				9F9EB055625D4FD1AB76FE12 /* WalkBuddyOnboardingView.swift */,
 			);
 			path = Onboarding;
 			sourceTree = "<group>";
@@ -416,6 +422,8 @@
 				STREAK000001 /* StreakManager.swift in Sources */,
 				DPSYN0000001 /* DailyPlanSyncCoordinator.swift in Sources */,
 				SMINT0000001 /* SmartPlannerIntroView.swift in Sources */,
+				0C4396C9137D48E48F5BDC9D /* NotificationsOnboardingView.swift in Sources */,
+				004E8EF3FE334175935A4249 /* WalkBuddyOnboardingView.swift in Sources */,
 				CELEB0000001 /* CelebrationView.swift in Sources */,
 				BUNDL0000001 /* Bundle+Extensions.swift in Sources */,
 				LEGAL0000001 /* LegalViews.swift in Sources */,
