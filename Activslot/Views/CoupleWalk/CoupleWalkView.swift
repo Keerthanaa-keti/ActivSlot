@@ -4,7 +4,7 @@ import SwiftUI
 // Lets two partners share free/busy availability and discover shared walk slots.
 
 struct CoupleWalkView: View {
-    @StateObject private var coupleWalkManager = CoupleWalkManager.shared
+    @ObservedObject private var coupleWalkManager = CoupleWalkManager.shared
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var outlookManager: OutlookManager
 

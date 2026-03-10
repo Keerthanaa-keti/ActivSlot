@@ -10,7 +10,7 @@ import SwiftUI
 // 6. Reward (Smart Planner) - Deliver immediate value
 
 struct OnboardingContainerView: View {
-    @StateObject private var userPreferences = UserPreferences.shared
+    @ObservedObject private var userPreferences = UserPreferences.shared
     @EnvironmentObject var healthKitManager: HealthKitManager
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var outlookManager: OutlookManager

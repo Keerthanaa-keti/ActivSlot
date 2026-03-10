@@ -2,8 +2,8 @@ import SwiftUI
 
 struct SmartPlanView: View {
     @EnvironmentObject var userPreferences: UserPreferences
-    @StateObject private var planner = SmartPlannerEngine.shared
-    var showTomorrow: Bool = false
+    @ObservedObject private var planner = SmartPlannerEngine.shared
+    var showTomorrowTrigger: Int = 0
 
     @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var isRefreshing = false
@@ -29,7 +29,7 @@ struct SmartPlanView: View {
                     // Day Picker: Today / Tomorrow
                     Picker("Day", selection: $selectedDate) {
                         Text("Today").tag(Calendar.current.startOfDay(for: Date()))
-                        Text("Tomorrow").tag(Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!))
+                        Text("Tomorrow").tag(Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()))
                     }
                     .pickerStyle(.segmented)
 
@@ -49,10 +49,17 @@ struct SmartPlanView: View {
                 await refreshPlanAsync()
             }
             .task {
-                if showTomorrow {
-                    selectedDate = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+                if showTomorrowTrigger > 0 {
+                    if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) {
+                        selectedDate = Calendar.current.startOfDay(for: tomorrow)
+                    }
                 }
                 await initialLoad()
+            }
+            .onChange(of: showTomorrowTrigger) { _, _ in
+                if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) {
+                    selectedDate = Calendar.current.startOfDay(for: tomorrow)
+                }
             }
             .sheet(item: $showingActivityDetail) { activity in
                 SmartActivityDetailSheet(
@@ -138,7 +145,7 @@ struct SmartPlanView: View {
 
     @ViewBuilder
     private var tomorrowPlanContent: some View {
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
 
         // Walk Pattern Graph for tomorrow's day of week
         let patternData = planner.getHourlyPatternData(for: tomorrow)
@@ -213,7 +220,7 @@ struct SmartPlanView: View {
         _ = await planner.generateDailyPlan(for: Date())
 
         // Pre-load tomorrow's plan and events
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) else { return }
         let plan = await planner.generateDailyPlan(for: tomorrow)
         if let events = try? await calendarManager.fetchEvents(for: tomorrow) {
             await MainActor.run {
@@ -240,7 +247,7 @@ struct SmartPlanView: View {
             }
             _ = await planner.generateDailyPlan(for: Date())
         } else {
-            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+            guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) else { return }
             let plan = await planner.generateDailyPlan(for: tomorrow)
             if let events = try? await CalendarManager.shared.fetchEvents(for: tomorrow) {
                 await MainActor.run { tomorrowEvents = events }

@@ -6,7 +6,7 @@ import SwiftUI
 struct WalkBuddyOnboardingView: View {
     let onContinue: () -> Void
 
-    @StateObject private var coupleWalkManager = CoupleWalkManager.shared
+    @ObservedObject private var coupleWalkManager = CoupleWalkManager.shared
 
     @State private var showConnectOptions = false
     @State private var inviteCode = ""

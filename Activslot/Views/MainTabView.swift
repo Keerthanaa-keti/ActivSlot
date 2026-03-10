@@ -3,7 +3,7 @@ import SwiftUI
 struct MainTabView: View {
     @State private var selectedTab: Int
     @State private var calendarTodayTapCount = 0
-    @State private var showTomorrow = false
+    @State private var showTomorrowTrigger = 0
 
     init() {
         #if DEBUG
@@ -22,7 +22,7 @@ struct MainTabView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
-                SmartPlanView(showTomorrow: showTomorrow)
+                SmartPlanView(showTomorrowTrigger: showTomorrowTrigger)
                     .tabItem {
                         Label("My Plan", systemImage: "list.bullet.clipboard")
                     }
@@ -72,7 +72,7 @@ struct MainTabView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .openDayPlan)) { _ in
             selectedTab = 0
-            showTomorrow = true
+            showTomorrowTrigger += 1
         }
         .onReceive(NotificationCenter.default.publisher(for: .openSmartPlan)) { _ in
             selectedTab = 0

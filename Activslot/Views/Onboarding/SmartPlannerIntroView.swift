@@ -7,7 +7,7 @@ import SwiftUI
 struct SmartPlannerIntroView: View {
     let onContinue: () -> Void
 
-    @StateObject private var planner = SmartPlannerEngine.shared
+    @ObservedObject private var planner = SmartPlannerEngine.shared
     @EnvironmentObject var userPreferences: UserPreferences
     @EnvironmentObject var calendarManager: CalendarManager
 
