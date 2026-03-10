@@ -196,6 +196,11 @@ struct SmartPlanView: View {
             await planner.analyzeUserPatterns()
         }
 
+        // Analyze day-of-week patterns for the pattern graph
+        if planner.dayOfWeekPatterns == nil {
+            await planner.analyzeDayOfWeekPatterns()
+        }
+
         let calendarManager = CalendarManager.shared
 
         #if DEBUG

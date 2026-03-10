@@ -164,6 +164,12 @@ struct ActivslotApp: App {
                 // Refresh calendar events first
                 await calendarManager.refreshEvents()
 
+                // Analyze walking patterns if not yet loaded
+                let planner = SmartPlannerEngine.shared
+                if planner.dayOfWeekPatterns == nil {
+                    await planner.analyzeDayOfWeekPatterns()
+                }
+
                 // Regenerate movement plans with updated calendar data
                 await MovementPlanManager.shared.generatePlans()
 
