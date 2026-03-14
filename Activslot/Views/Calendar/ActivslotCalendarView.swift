@@ -3,8 +3,8 @@ import SwiftUI
 // MARK: - Main Calendar View
 
 struct ActivslotCalendarView: View {
-    @StateObject private var activityStore = ActivityStore.shared
-    @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
+    @ObservedObject private var activityStore = ActivityStore.shared
+    @ObservedObject private var scheduledActivityManager = ScheduledActivityManager.shared
     @EnvironmentObject var calendarManager: CalendarManager
 
     // Trigger to reset to today when calendar tab is tapped
@@ -1032,7 +1032,7 @@ struct WeekCalendarView: View {
 
     private var weekDates: [Date] {
         let calendar = Calendar.current
-        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: selectedDate))!
+        guard let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: selectedDate)) else { return [] }
         return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
     }
 
@@ -1252,8 +1252,8 @@ struct MonthCalendarView: View {
 
     private func daysInMonth() -> [Date?] {
         let calendar = Calendar.current
-        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate))!
-        let range = calendar.range(of: .day, in: .month, for: startOfMonth)!
+        guard let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate)),
+              let range = calendar.range(of: .day, in: .month, for: startOfMonth) else { return [] }
 
         let firstWeekday = calendar.component(.weekday, from: startOfMonth)
         var days: [Date?] = Array(repeating: nil, count: firstWeekday - 1)

@@ -5,11 +5,11 @@ struct HomeView: View {
     @EnvironmentObject var userPreferences: UserPreferences
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var outlookManager: OutlookManager
-    @StateObject private var planManager = MovementPlanManager.shared
-    @StateObject private var insightsManager = PersonalInsightsManager.shared
-    @StateObject private var scheduledActivityManager = ScheduledActivityManager.shared
-    @StateObject private var activityStore = ActivityStore.shared
-    @StateObject private var streakManager = StreakManager.shared
+    @ObservedObject private var planManager = MovementPlanManager.shared
+    @ObservedObject private var insightsManager = PersonalInsightsManager.shared
+    @ObservedObject private var scheduledActivityManager = ScheduledActivityManager.shared
+    @ObservedObject private var activityStore = ActivityStore.shared
+    @ObservedObject private var streakManager = StreakManager.shared
 
     // Trigger to reset to Today tab when bottom tab is tapped
     var resetToTodayTrigger: Int = 0

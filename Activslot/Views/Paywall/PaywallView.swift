@@ -11,6 +11,8 @@ struct PaywallView: View {
     @State private var isPurchasing = false
     @State private var showError = false
     @State private var errorText = ""
+    @State private var showTerms = false
+    @State private var showPrivacy = false
 
     init(triggeredBy: PremiumFeature? = nil) {
         self.triggeredBy = triggeredBy
@@ -237,19 +239,43 @@ struct PaywallView: View {
 
     private var legalLinks: some View {
         HStack(spacing: 16) {
-            Button("Terms of Service") {}
-                .font(.caption2)
-                .foregroundColor(.secondary)
+            Button("Terms of Service") {
+                showTerms = true
+            }
+            .font(.caption2)
+            .foregroundColor(.secondary)
 
             Text("|")
                 .font(.caption2)
                 .foregroundColor(.secondary)
 
-            Button("Privacy Policy") {}
-                .font(.caption2)
-                .foregroundColor(.secondary)
+            Button("Privacy Policy") {
+                showPrivacy = true
+            }
+            .font(.caption2)
+            .foregroundColor(.secondary)
         }
         .padding(.bottom, 8)
+        .sheet(isPresented: $showTerms) {
+            NavigationStack {
+                TermsOfServiceView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showTerms = false }
+                        }
+                    }
+            }
+        }
+        .sheet(isPresented: $showPrivacy) {
+            NavigationStack {
+                PrivacyPolicyView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showPrivacy = false }
+                        }
+                    }
+            }
+        }
     }
 
     // MARK: - Helpers

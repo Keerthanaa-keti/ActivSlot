@@ -628,8 +628,9 @@ class CalendarManager: ObservableObject {
             startComponents.hour = startHour
             startComponents.minute = startMinute
 
-            event.startDate = Calendar.current.date(from: startComponents)!
-            event.endDate = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: event.startDate)!
+            guard let startDate = Calendar.current.date(from: startComponents) else { return }
+            event.startDate = startDate
+            event.endDate = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: startDate) ?? startDate
             event.isAllDay = isAllDay
 
             // Note: Can't add attendees programmatically on iOS, but our CalendarEvent will default to 0

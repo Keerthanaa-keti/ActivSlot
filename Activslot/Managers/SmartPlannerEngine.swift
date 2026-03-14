@@ -365,7 +365,8 @@ class SmartPlannerEngine: ObservableObject {
 
         #if DEBUG
         if let pattern = dayPattern {
-            let dayName = calendar.weekdaySymbols[calendar.component(.weekday, from: date) - 1]
+            let wdi = calendar.component(.weekday, from: date) - 1
+            let dayName = calendar.weekdaySymbols.indices.contains(wdi) ? calendar.weekdaySymbols[wdi] : "Unknown"
             print("SmartPlannerEngine: Using \(dayName)-specific patterns - peaks at \(pattern.peakActivityHours)")
         }
         print("SmartPlannerEngine: Steps needed: \(stepsNeeded), Available slots: \(availableSlots.count), Walkable meetings: \(walkableMeetings.filter { $0.isRecommended }.count)")
@@ -1270,7 +1271,7 @@ class SmartPlannerEngine: ObservableObject {
         print("SmartPlannerEngine: Day-of-week patterns analyzed")
         for weekday in 1...7 {
             if let pattern = newPatterns.dayPatterns[weekday] {
-                let dayName = calendar.weekdaySymbols[weekday - 1]
+                let dayName = calendar.weekdaySymbols.indices.contains(weekday - 1) ? calendar.weekdaySymbols[weekday - 1] : "Day\(weekday)"
                 print("  \(dayName): avg \(pattern.averageDailySteps) steps, peaks at \(pattern.peakActivityHours)")
             }
         }
@@ -1360,7 +1361,7 @@ class SmartPlannerEngine: ObservableObject {
     func getPatternExplanation(for date: Date) -> String {
         let calendar = Calendar.current
         let weekday = calendar.component(.weekday, from: date)
-        let dayName = calendar.weekdaySymbols[weekday - 1]
+        let dayName = calendar.weekdaySymbols.indices.contains(weekday - 1) ? calendar.weekdaySymbols[weekday - 1] : "Today"
         let prefs = UserPreferences.shared
 
         let preferenceText: String

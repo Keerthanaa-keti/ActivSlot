@@ -92,7 +92,8 @@ struct SmartPlanView: View {
         // Walk Pattern Graph
         let patternData = planner.getHourlyPatternData(for: selectedDate)
         let explanation = planner.getPatternExplanation(for: selectedDate)
-        let dayName = Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: selectedDate) - 1]
+        let weekdayIndex = Calendar.current.component(.weekday, from: selectedDate) - 1
+        let dayName = Calendar.current.weekdaySymbols.indices.contains(weekdayIndex) ? Calendar.current.weekdaySymbols[weekdayIndex] : "Today"
 
         if !patternData.isEmpty {
             WalkPatternGraphCard(
@@ -150,7 +151,8 @@ struct SmartPlanView: View {
         // Walk Pattern Graph for tomorrow's day of week
         let patternData = planner.getHourlyPatternData(for: tomorrow)
         let explanation = planner.getPatternExplanation(for: tomorrow)
-        let dayName = Calendar.current.weekdaySymbols[Calendar.current.component(.weekday, from: tomorrow) - 1]
+        let tomorrowWeekdayIndex = Calendar.current.component(.weekday, from: tomorrow) - 1
+        let dayName = Calendar.current.weekdaySymbols.indices.contains(tomorrowWeekdayIndex) ? Calendar.current.weekdaySymbols[tomorrowWeekdayIndex] : "Tomorrow"
 
         if !patternData.isEmpty {
             WalkPatternGraphCard(

@@ -776,7 +776,7 @@ class MovementPlanManager: ObservableObject {
     private func resetWeekIfNeeded() {
         let calendar = Calendar.current
         let now = Date()
-        let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now))!
+        guard let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) else { return }
 
         if weekStartDateTimestamp != weekStart.timeIntervalSince1970 {
             weekStartDateTimestamp = weekStart.timeIntervalSince1970

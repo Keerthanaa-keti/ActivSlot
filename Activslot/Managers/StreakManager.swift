@@ -69,36 +69,40 @@ class StreakManager: ObservableObject {
         }
     }
 
-    /// Calculate streak asynchronously from HealthKit data
+    /// Calculate streak asynchronously from HealthKit data using a single batch query
     func calculateStreakFromHistory(healthKitManager: HealthKitManager, goalSteps: Int) async {
         let calendar = Calendar.current
-        var streak = 0
-        var checkDate = calendar.startOfDay(for: Date())
+        let today = calendar.startOfDay(for: Date())
 
-        // Check backwards from today
-        for _ in 0..<365 { // Max 1 year lookback
-            do {
-                let steps = try await healthKitManager.fetchSteps(for: checkDate)
+        // Fetch all daily steps in one batch query instead of 365 individual queries
+        guard let yearAgo = calendar.date(byAdding: .day, value: -365, to: today) else { return }
+
+        do {
+            let dailySteps = try await healthKitManager.fetchDailySteps(from: yearAgo, to: today)
+
+            // Walk backwards from today counting consecutive days meeting goal
+            var streak = 0
+            var checkDate = today
+            for _ in 0..<365 {
+                let steps = dailySteps[checkDate] ?? 0
                 if steps >= goalSteps {
                     streak += 1
-                    guard let previousDay = calendar.date(byAdding: .day, value: -1, to: checkDate) else {
-                        break
-                    }
+                    guard let previousDay = calendar.date(byAdding: .day, value: -1, to: checkDate) else { break }
                     checkDate = previousDay
                 } else {
                     break
                 }
-            } catch {
-                break
             }
-        }
 
-        await MainActor.run {
-            self.currentStreak = streak
-            if streak > self.longestStreak {
-                self.longestStreak = streak
+            await MainActor.run {
+                self.currentStreak = streak
+                if streak > self.longestStreak {
+                    self.longestStreak = streak
+                }
+                self.saveStreakData()
             }
-            self.saveStreakData()
+        } catch {
+            // Fallback silently - streak stays at cached value
         }
     }
 

@@ -180,8 +180,9 @@ class TestDataManager: ObservableObject {
         startComponents.hour = startHour
         startComponents.minute = startMinute
 
-        event.startDate = Calendar.current.date(from: startComponents)!
-        event.endDate = Calendar.current.date(byAdding: .minute, value: duration, to: event.startDate)!
+        guard let startDate = Calendar.current.date(from: startComponents) else { return }
+        event.startDate = startDate
+        event.endDate = Calendar.current.date(byAdding: .minute, value: duration, to: startDate) ?? startDate
 
         // Note: We can't add attendees programmatically, but the title affects walkability
 
@@ -211,7 +212,10 @@ class TestDataManager: ObservableObject {
         }
 
         // Request write authorization
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            log("  Step count type not available")
+            return
+        }
 
         do {
             try await healthStore.requestAuthorization(toShare: [stepType], read: [stepType])
@@ -283,11 +287,11 @@ class TestDataManager: ObservableObject {
     }
 
     private func saveSteps(_ steps: Int, for date: Date) async {
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
         let quantity = HKQuantity(unit: .count(), doubleValue: Double(steps))
 
         let startOfDay = Calendar.current.startOfDay(for: date)
-        let endOfDay = Calendar.current.date(byAdding: .hour, value: 23, to: startOfDay)!
+        guard let endOfDay = Calendar.current.date(byAdding: .hour, value: 23, to: startOfDay) else { return }
 
         let sample = HKQuantitySample(type: stepType, quantity: quantity, start: startOfDay, end: endOfDay)
 
@@ -299,7 +303,7 @@ class TestDataManager: ObservableObject {
     }
 
     private func saveStepsForToday(_ steps: Int) async {
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
 
         // Check authorization status
         let authStatus = healthStore.authorizationStatus(for: stepType)
@@ -356,8 +360,8 @@ class TestDataManager: ObservableObject {
                 startComps.hour = 12
                 startComps.minute = 30
 
-                let startDate = calendar.date(from: startComps)!
-                let endDate = calendar.date(byAdding: .minute, value: 30, to: startDate)!
+                guard let startDate = calendar.date(from: startComps),
+                      let endDate = calendar.date(byAdding: .minute, value: 30, to: startDate) else { continue }
 
                 let workout = HKWorkout(
                     activityType: .walking,
@@ -927,7 +931,7 @@ extension TestDataManager {
         if let p = patterns {
             details.append("Found patterns for \(p.dayPatterns.count) days")
             for (weekday, dayPattern) in p.dayPatterns {
-                let dayName = Calendar.current.weekdaySymbols[weekday - 1]
+                let dayName = Calendar.current.weekdaySymbols.indices.contains(weekday - 1) ? Calendar.current.weekdaySymbols[weekday - 1] : "Day\(weekday)"
                 details.append("  \(dayName): Peak hours \(dayPattern.peakActivityHours), avg \(dayPattern.averageDailySteps) steps")
             }
         } else {
@@ -1201,11 +1205,13 @@ extension TestDataManager {
         var pastComponents = calendar.dateComponents([.year, .month, .day], from: Date())
         pastComponents.hour = 8
         pastComponents.minute = 0
-        let pastTime = calendar.date(from: pastComponents)!
+        guard let pastTime = calendar.date(from: pastComponents) else {
+            return SmartPlannerTestResult(testName: "Adherence Verification", passed: false, message: "Failed to create test date", details: [])
+        }
 
         let slot = SmartPlannerEngine.PlannedActivity.TimeSlot(
             start: pastTime,
-            end: calendar.date(byAdding: .minute, value: 30, to: pastTime)!,
+            end: calendar.date(byAdding: .minute, value: 30, to: pastTime) ?? pastTime,
             isIdeal: true,
             conflictRisk: .low
         )

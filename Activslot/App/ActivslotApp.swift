@@ -153,11 +153,26 @@ struct ActivslotApp: App {
     }
     #endif
 
+    /// Tracks when the app last completed a full foreground refresh
+    private static var lastForegroundRefresh: Date?
+
     private func handleScenePhaseChange(_ phase: ScenePhase) {
         switch phase {
         case .active:
             // App became active - refresh notification authorization status
             NotificationManager.shared.checkAuthorizationStatus()
+
+            // Skip full refresh if app was backgrounded for less than 5 minutes
+            let now = Date()
+            if let lastRefresh = Self.lastForegroundRefresh,
+               now.timeIntervalSince(lastRefresh) < 300 {
+                // Still refresh calendar events (lightweight) but skip heavy operations
+                Task {
+                    await calendarManager.refreshEvents()
+                }
+                return
+            }
+            Self.lastForegroundRefresh = now
 
             // Refresh calendar data and regenerate plans
             Task {

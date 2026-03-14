@@ -227,7 +227,7 @@ struct SyncConfirmationSheet: View {
     let activity: PlannedActivity
     @Binding var syncOption: SyncOption
 
-    @StateObject private var calendarManager = CalendarManager.shared
+    @ObservedObject private var calendarManager = CalendarManager.shared
     @State private var selectedCalendars: Set<String> = []
     @State private var showCalendarPicker = false
 
@@ -328,7 +328,8 @@ struct SyncConfirmationSheet: View {
             return "Only sync today's event to your calendars."
         case .thisWeekday:
             let weekday = Calendar.current.component(.weekday, from: activity.startTime)
-            let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
+            let symbols = DateFormatter().weekdaySymbols ?? Calendar.current.weekdaySymbols
+            let weekdayName = symbols.indices.contains(weekday - 1) ? symbols[weekday - 1] : "this day"
             return "Sync all \(weekdayName) events to your calendars."
         case .alternating:
             return "Sync events on alternating days (e.g., Mon, Wed, Fri)."

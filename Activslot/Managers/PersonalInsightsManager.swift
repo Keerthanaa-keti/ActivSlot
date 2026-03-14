@@ -486,9 +486,13 @@ class PersonalInsightsManager: ObservableObject {
     // MARK: - HealthKit Queries
 
     private func fetchSteps(for date: Date) async throws -> Int {
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            throw HealthKitError.dataNotAvailable
+        }
         let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            return 0
+        }
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -511,7 +515,7 @@ class PersonalInsightsManager: ObservableObject {
     private func fetchWorkouts(for date: Date) async throws -> [HKWorkout] {
         let workoutType = HKObjectType.workoutType()
         let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return [] }
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -528,9 +532,13 @@ class PersonalInsightsManager: ObservableObject {
     }
 
     private func fetchActiveCalories(for date: Date) async throws -> Double {
-        let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
+        guard let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
+            throw HealthKitError.dataNotAvailable
+        }
         let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            return 0
+        }
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
 
         return try await withCheckedThrowingContinuation { continuation in

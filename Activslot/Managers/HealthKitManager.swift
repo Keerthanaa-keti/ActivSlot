@@ -125,9 +125,48 @@ class HealthKitManager: ObservableObject {
         }
     }
 
+    /// Fetch daily step counts for a date range in a single query (battery efficient)
+    func fetchDailySteps(from startDate: Date, to endDate: Date) async throws -> [Date: Int] {
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            throw HealthKitError.dataNotAvailable
+        }
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        var interval = DateComponents()
+        interval.day = 1
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: stepType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum,
+                anchorDate: Calendar.current.startOfDay(for: startDate),
+                intervalComponents: interval
+            )
+
+            query.initialResultsHandler = { _, results, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                var dailySteps: [Date: Int] = [:]
+                results?.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
+                    let steps = statistics.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                    dailySteps[Calendar.current.startOfDay(for: statistics.startDate)] = Int(steps)
+                }
+                continuation.resume(returning: dailySteps)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    private var stepObserverQuery: HKObserverQuery?
+
     func observeStepChanges(completion: @escaping (Int) -> Void) {
         guard isHealthKitAvailable else { return }
         guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
+
+        // Stop any existing observer before creating a new one
+        stopObservingStepChanges()
 
         let query = HKObserverQuery(sampleType: stepType, predicate: nil) { [weak self] _, _, error in
             if error == nil {
@@ -141,7 +180,15 @@ class HealthKitManager: ObservableObject {
             }
         }
 
+        stepObserverQuery = query
         healthStore.execute(query)
+    }
+
+    func stopObservingStepChanges() {
+        if let query = stepObserverQuery {
+            healthStore.stop(query)
+            stepObserverQuery = nil
+        }
     }
 
     // MARK: - Active Energy
