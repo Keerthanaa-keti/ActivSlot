@@ -56,7 +56,6 @@
 		SUBMG0000001 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SUBMG0000011 /* SubscriptionManager.swift */; };
 		PAYWL0000001 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PAYWL0000011 /* PaywallView.swift */; };
 		PFOVR0000001 /* PremiumFeatureOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = PFOVR0000011 /* PremiumFeatureOverlay.swift */; };
-		RGIFT0000001 /* RedeemGiftCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RGIFT0000011 /* RedeemGiftCodeView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -111,7 +110,6 @@
 		SUBMG0000011 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
 		PAYWL0000011 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		PFOVR0000011 /* PremiumFeatureOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumFeatureOverlay.swift; sourceTree = "<group>"; };
-		RGIFT0000011 /* RedeemGiftCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedeemGiftCodeView.swift; sourceTree = "<group>"; };
 		STKIT0000011 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -301,7 +299,6 @@
 			children = (
 				PAYWL0000011 /* PaywallView.swift */,
 				PFOVR0000011 /* PremiumFeatureOverlay.swift */,
-				RGIFT0000011 /* RedeemGiftCodeView.swift */,
 			);
 			path = Paywall;
 			sourceTree = "<group>";
@@ -433,7 +430,6 @@
 				SUBMG0000001 /* SubscriptionManager.swift in Sources */,
 				PAYWL0000001 /* PaywallView.swift in Sources */,
 				PFOVR0000001 /* PremiumFeatureOverlay.swift in Sources */,
-				RGIFT0000001 /* RedeemGiftCodeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -566,7 +562,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Activslot/Activslot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = 3W37J33N79;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -599,7 +595,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Activslot/Activslot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = 3W37J33N79;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;

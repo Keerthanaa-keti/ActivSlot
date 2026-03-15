@@ -1,7 +1,6 @@
 import Foundation
 import StoreKit
 import SwiftUI
-import CloudKit
 
 // MARK: - Premium Feature Types
 
@@ -59,15 +58,12 @@ class SubscriptionManager: ObservableObject {
     // Cached entitlement
     @AppStorage("cachedProEntitlement") private var cachedEntitlement: Bool = false
 
-    // Gift code redemption - persists independently of StoreKit
-    @AppStorage("giftCodeRedeemed") private(set) var giftCodeRedeemed: Bool = false
-    @AppStorage("giftCodeValue") private var redeemedGiftCode: String = ""
 
     private var transactionListener: Task<Void, Error>?
 
     private init() {
-        // Use cached entitlement or gift code until we verify with StoreKit
-        isProUser = cachedEntitlement || giftCodeRedeemed
+        // Use cached entitlement until we verify with StoreKit
+        isProUser = cachedEntitlement
 
         // Start listening for transactions
         transactionListener = listenForTransactions()
@@ -168,7 +164,7 @@ class SubscriptionManager: ObservableObject {
         }
 
         purchasedProductIDs = activePurchases
-        let isPro = !activePurchases.isEmpty || giftCodeRedeemed
+        let isPro = !activePurchases.isEmpty
         isProUser = isPro
         cachedEntitlement = isPro
     }
@@ -197,7 +193,7 @@ class SubscriptionManager: ObservableObject {
             purchasedProductIDs.remove(transaction.productID)
         }
 
-        let isPro = !purchasedProductIDs.isEmpty || giftCodeRedeemed
+        let isPro = !purchasedProductIDs.isEmpty
         isProUser = isPro
         cachedEntitlement = isPro
     }
@@ -230,62 +226,6 @@ class SubscriptionManager: ObservableObject {
         return "Save \(percent)%"
     }
 
-    // MARK: - Gift Code Redemption
-
-    /// Redeem a gift code via CloudKit. Returns nil on success, or an error message.
-    func redeemGiftCode(_ code: String) async -> String? {
-        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !trimmed.isEmpty else { return "Please enter a code." }
-        guard trimmed.count >= 6 else { return "Invalid code format." }
-
-        let container = CKContainer(identifier: "iCloud.com.activslot.healthapp")
-        let publicDB = container.publicCloudDatabase
-
-        // Query for matching code
-        let predicate = NSPredicate(format: "code == %@", trimmed)
-        let query = CKQuery(recordType: "GiftCoupon", predicate: predicate)
-
-        do {
-            let (results, _) = try await publicDB.records(matching: query, resultsLimit: 1)
-
-            guard let (_, recordResult) = results.first else {
-                return "Invalid code. Please check and try again."
-            }
-
-            let record = try recordResult.get()
-
-            // Check if already redeemed
-            if let isRedeemed = record["isRedeemed"] as? Int64, isRedeemed == 1 {
-                return "This code has already been used."
-            }
-
-            // Check expiry
-            if let expiresAt = record["expiresAt"] as? Date, expiresAt < Date() {
-                return "This code has expired."
-            }
-
-            // Mark as redeemed
-            record["isRedeemed"] = 1 as CKRecordValue
-            record["redeemedAt"] = Date() as CKRecordValue
-
-            // Get current user ID
-            if let userID = try? await container.userRecordID() {
-                record["redeemedBy"] = userID.recordName as CKRecordValue
-            }
-
-            _ = try await publicDB.save(record)
-
-            // Grant Pro access
-            giftCodeRedeemed = true
-            redeemedGiftCode = trimmed
-            isProUser = true
-            cachedEntitlement = true
-
-            return nil // success
-        } catch {
-            return "Could not verify code. Please check your internet connection."
-        }
-    }
 }
 
 // MARK: - Errors

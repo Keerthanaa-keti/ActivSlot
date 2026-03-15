@@ -89,7 +89,7 @@ struct PermissionsView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .padding(.trailing, 8)
                     }
-                    Text("Allow & Continue")
+                    Text("Continue")
                         .font(.headline)
                 }
                 .foregroundColor(.white)
@@ -102,15 +102,6 @@ struct PermissionsView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 12)
 
-            // Skip button
-            Button {
-                calendarSkipped = true
-                onContinue()
-            } label: {
-                Text("Skip for now")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
             .padding(.bottom, 40)
         }
         .alert("Permission Error", isPresented: $showError) {
